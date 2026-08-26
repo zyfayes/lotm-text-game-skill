@@ -1,0 +1,10 @@
+interface:
+  display_name: "诡秘之主文字游戏"
+  short_description: "运行可持久化、跨平台且支持沉浸插图的诡秘文字冒险"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/icon.svg"
+  brand_color: "#6D1F2E"
+  default_prompt: "使用 $lotm-text-game 开启或继续一局诡秘之主文字游戏。"
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,28 @@
+{
+  "name": "艾琳·维尔",
+  "nickname": "艾琳",
+  "identity": "廷根市古董店学徒",
+  "location": "廷根市·水仙花街·旧钟表铺",
+  "main": "查明午夜后仍会自行走动的黄铜怀表来自何处",
+  "current": "趁店主离开柜台，检查怀表背面的家族徽记",
+  "spirituality": {"current": 8, "max": 10},
+  "sanity": 96,
+  "pollution": 2,
+  "money": "12苏勒8便士",
+  "body_state": "健康",
+  "mind_state": "紧张",
+  "effects": [],
+  "current_event": {"label": "私下调查", "danger_level": "轻微"},
+  "sequence": "凡人",
+  "pathway": "未选择",
+  "acting": "不适用",
+  "inventory": [
+    {"name": "黄铜钥匙", "tone": "ordinary"},
+    {"name": "旧围巾", "tone": "ordinary"},
+    {"name": "铅笔", "tone": "ordinary"},
+    {"name": "账簿副本", "tone": "clue", "rank_label": "线索"}
+  ],
+  "companions": [],
+  "state_revision": 7,
+  "world_time": "纪元1349年6月28日·21:10"
+}

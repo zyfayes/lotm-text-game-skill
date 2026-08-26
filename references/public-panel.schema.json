@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/lotm-text-game/public-panel.schema.json",
+  "title": "Lord of Mysteries public panel model",
+  "$defs": {
+    "visualTone": {
+      "enum": ["ordinary", "clue", "extraordinary", "warning", "danger", "high_order", "beneficial", "critical"]
+    },
+    "publicEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 80},
+        "tone": {"$ref": "#/$defs/visualTone"},
+        "rank_label": {"type": ["string", "null"], "maxLength": 30}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "identity",
+    "location",
+    "main",
+    "current",
+    "spirituality",
+    "sanity",
+    "pollution",
+    "money",
+    "body_state",
+    "mind_state",
+    "sequence",
+    "pathway",
+    "acting",
+    "inventory",
+    "state_revision"
+  ],
+  "properties": {
+    "name": {"type": "string", "minLength": 1, "maxLength": 80},
+    "nickname": {"type": ["string", "null"], "maxLength": 40},
+    "identity": {"type": "string", "minLength": 1, "maxLength": 120},
+    "location": {"type": "string", "minLength": 1, "maxLength": 160},
+    "main": {"type": "string", "minLength": 1, "maxLength": 220},
+    "current": {"type": "string", "minLength": 1, "maxLength": 180},
+    "spirituality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current", "max"],
+      "properties": {
+        "current": {"type": "integer", "minimum": 0},
+        "max": {"type": "integer", "minimum": 1}
+      }
+    },
+    "sanity": {"type": "integer", "minimum": 0, "maximum": 100},
+    "pollution": {"type": "integer", "minimum": 0, "maximum": 100},
+    "money": {"type": "string", "minLength": 1, "maxLength": 80},
+    "body_state": {
+      "enum": ["健康", "轻伤", "重伤", "濒死", "失控倾向", "灵性枯竭"]
+    },
+    "mind_state": {
+      "enum": ["清醒", "紧张", "焦虑", "恍惚", "疯狂"]
+    },
+    "effects": {
+      "type": "array",
+      "maxItems": 4,
+      "default": [],
+      "items": {
+        "oneOf": [
+          {"type": "string", "minLength": 1, "maxLength": 40},
+          {"$ref": "#/$defs/publicEntry"}
+        ]
+      }
+    },
+    "sequence": {"type": "string", "minLength": 1, "maxLength": 80},
+    "pathway": {"type": "string", "minLength": 1, "maxLength": 80},
+    "acting": {"type": "string", "minLength": 1, "maxLength": 40},
+    "inventory": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "oneOf": [
+          {"type": "string", "minLength": 1, "maxLength": 80},
+          {"$ref": "#/$defs/publicEntry"}
+        ]
+      }
+    },
+    "current_event": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["label", "danger_level"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 60},
+        "danger_level": {"enum": ["轻微", "显著", "严重", "致命", "灾难"]}
+      }
+    },
+    "companions": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 60},
+          "status": {"type": "string", "minLength": 1, "maxLength": 100}
+        }
+      }
+    },
+    "state_revision": {"type": "integer", "minimum": 1},
+    "world_time": {"type": ["string", "null"], "maxLength": 80}
+  }
+}
