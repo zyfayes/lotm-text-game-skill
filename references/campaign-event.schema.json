@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/lotm-text-game/campaign-event.schema.json",
+  "title": "LOTM text game committed event v1.6",
+  "$defs": {
+    "outcome": {"enum": ["大失败", "失败", "险成", "成功", "大成功"]},
+    "risk": {"enum": ["轻微", "显著", "严重", "致命", "灾难"]},
+    "modifier": {
+      "type": "object",
+      "required": ["name", "value"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 120},
+        "value": {"type": "integer"}
+      },
+      "additionalProperties": false
+    },
+    "patchOperation": {
+      "type": "object",
+      "required": ["op", "path"],
+      "properties": {
+        "op": {"enum": ["add", "replace", "remove"]},
+        "path": {"type": "string", "pattern": "^/"},
+        "old": {},
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"op": {"const": "add"}}},
+          "then": {"required": ["value"]}
+        },
+        {
+          "if": {"properties": {"op": {"enum": ["replace", "remove"]}}},
+          "then": {"required": ["old"]}
+        },
+        {
+          "if": {"properties": {"op": {"const": "replace"}}},
+          "then": {"required": ["value"]}
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": [
+    "event_id",
+    "type",
+    "previous_state_revision",
+    "state_revision",
+    "world_time",
+    "action",
+    "stakes",
+    "roll",
+    "consequences",
+    "state_patch",
+    "visible_result",
+    "created_at"
+  ],
+  "properties": {
+    "event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
+    "type": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "previous_state_revision": {"type": "integer", "minimum": 0},
+    "state_revision": {"type": "integer", "minimum": 1},
+    "world_time": {"type": "string", "minLength": 1, "maxLength": 80},
+    "action": {"type": "string", "minLength": 1, "maxLength": 500},
+    "stakes": {
+      "type": ["object", "null"],
+      "properties": {
+        "intent": {"type": "string", "minLength": 1, "maxLength": 300},
+        "approach": {"type": "string", "minLength": 1, "maxLength": 300},
+        "target": {"type": "integer", "minimum": 1},
+        "risk_level": {"$ref": "#/$defs/risk"},
+        "foreseeable_consequences": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["伤势", "时间", "资源", "暴露", "关系", "污染", "机会丧失", "世界时钟"]}
+        },
+        "public_modifiers": {"type": "array", "items": {"$ref": "#/$defs/modifier"}}
+      },
+      "required": ["intent", "approach", "target", "risk_level", "foreseeable_consequences", "public_modifiers"],
+      "additionalProperties": false
+    },
+    "roll": {
+      "type": ["object", "null"],
+      "properties": {
+        "rng_method": {"enum": ["system_csprng", "hmac_sha256_rejection_v1", "platform_verified"]},
+        "seed_commitment": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "counter": {"type": ["integer", "null"], "minimum": 0},
+        "platform_result_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 240},
+        "context": {"type": "string", "minLength": 1, "maxLength": 240},
+        "raw": {"type": "integer", "minimum": 1, "maximum": 100},
+        "attribute": {"type": "integer"},
+        "skill": {"type": "integer"},
+        "mode_modifier": {"type": "integer"},
+        "situational_modifiers": {"type": "array", "items": {"$ref": "#/$defs/modifier"}},
+        "total": {"type": "integer"},
+        "target": {"type": "integer", "minimum": 1},
+        "base_result": {"$ref": "#/$defs/outcome"},
+        "final_result": {"$ref": "#/$defs/outcome"},
+        "overflow_edge": {"type": "boolean"}
+      },
+      "required": ["rng_method", "seed_commitment", "counter", "platform_result_id", "context", "raw", "attribute", "skill", "mode_modifier", "situational_modifiers", "total", "target", "base_result", "final_result", "overflow_edge"],
+      "allOf": [
+        {
+          "if": {"properties": {"rng_method": {"const": "hmac_sha256_rejection_v1"}}, "required": ["rng_method"]},
+          "then": {
+            "properties": {
+              "seed_commitment": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "counter": {"type": "integer", "minimum": 0},
+              "platform_result_id": {"const": null}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"rng_method": {"const": "system_csprng"}}, "required": ["rng_method"]},
+          "then": {"properties": {"seed_commitment": {"const": null}, "counter": {"const": null}, "platform_result_id": {"const": null}}}
+        },
+        {
+          "if": {"properties": {"rng_method": {"const": "platform_verified"}}, "required": ["rng_method"]},
+          "then": {
+            "properties": {
+              "seed_commitment": {"const": null},
+              "counter": {"const": null},
+              "platform_result_id": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "consequences": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["category", "severity", "description"],
+        "properties": {
+          "category": {"enum": ["伤势", "时间", "资源", "暴露", "关系", "污染", "机会丧失", "世界时钟"]},
+          "severity": {"$ref": "#/$defs/risk"},
+          "description": {"type": "string", "minLength": 1, "maxLength": 300}
+        },
+        "additionalProperties": false
+      }
+    },
+    "state_patch": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/patchOperation"}
+    },
+    "visible_result": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "transport": {"type": ["object", "null"]},
+    "migration": {
+      "type": ["object", "null"],
+      "properties": {
+        "from_schema_version": {"type": "string", "minLength": 1},
+        "to_schema_version": {"const": "1.6"},
+        "from_ruleset_version": {"type": "string", "minLength": 1},
+        "to_ruleset_version": {"const": "1.6"},
+        "notes": {"type": "string", "minLength": 1, "maxLength": 1000}
+      },
+      "required": ["from_schema_version", "to_schema_version", "from_ruleset_version", "to_ruleset_version", "notes"],
+      "additionalProperties": false
+    },
+    "created_at": {"type": "string", "minLength": 1, "maxLength": 80}
+  },
+  "additionalProperties": false
+}

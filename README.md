@@ -15,15 +15,18 @@ This is a game engine, not a scripted story. It combines open-ended role-play wi
 | Free-form action | Suggested choices never lock the player into a menu. Any plausible in-world action can be attempted. |
 | A living timeline | Factions, threats, and major events continue to develop even when the player looks elsewhere. |
 | Real consequences | Money, injuries, suspicion, relationships, corruption, and missed timing all persist. |
+| Fair risk and failure | Irreversible checks disclose foreseeable stakes first; failure changes the situation and leaves a new way forward. |
+| Solvable mysteries | Required conclusions keep independent clue routes, while evidence carries source, confidence, and verification state. |
 | Sequence progression | Potions, acting, spirituality, rituals, ingredients, and loss-of-control risk form one connected advancement loop. |
 | Butterfly effects | Interventions accumulate causal weight and can redirect major story anchors without turning canon characters into puppets. |
 | No save-scumming | Rolls and consequences are committed once. Recovery restores interrupted writes; it never rerolls history. |
+| Auditable randomness | Checks use a system CSPRNG, committed HMAC stream, or verified platform RNG and store the raw roll, context, counter or platform receipt, and adjudication. |
 | Three difficulty modes | Play a fate-favored adventure, a grounded ordinary life, or a hostile survival campaign. |
 | Optional illustrations | Important people, objects, and scenes can receive generated artwork after the core turn is complete and the player agrees. |
 
 ## Winning, losing, and campaign length
 
-After the first meaningful scene, the Agent offers four life goals tailored to the character's background and public story hooks, plus a free-entry option. Typical directions include freedom, truth or revenge, Beyonder mastery, status or belonging, and protecting someone or changing a fate.
+After the first meaningful scene, the Agent offers four life goals tailored to the character's background and public story hooks, plus a free-entry option. Typical directions include freedom, truth or revenge, Beyonder mastery, status or belonging, and protecting someone or changing a fate. Before a goal is locked, the player confirms one to three observable success conditions. Every completed condition points to committed event evidence, preventing the ending threshold from drifting later.
 
 | Outcome | Meaning |
 |---|---|
@@ -52,7 +55,10 @@ flowchart TD
     U[Player] --> T[Local Agent or IM Transport]
     T --> A[Agent running SKILL.md]
     A --> R[Ruleset and adjudication]
-    R --> E[Append one immutable event]
+    R --> D{Check required?}
+    D -->|Yes| G[Auditable d100 RNG]
+    D -->|No| E[Append one immutable event]
+    G --> E
     E --> S[Commit authoritative state]
     S --> J[Journal and portable anchor]
     S --> P[Public panel model]
@@ -64,11 +70,12 @@ flowchart TD
 | Layer | Responsibility | Main files |
 |---|---|---|
 | Agent contract | Loads the correct rules and preserves turn order | `SKILL.md` |
-| Game semantics | World, character creation, Pathways, checks, advancement, causality, and endings | `references/ruleset.md` |
+| Game semantics | World, character creation, fair stakes, clue closure, checks, advancement, causality, and endings | `references/ruleset.md` |
 | Persistence | Campaign scoping, append-only events, atomic state, concurrency, and recovery | `references/runtime-and-storage.md` |
 | Transport | Telegram and generic IM delivery, deduplication, buttons, and outbox behavior | `references/transport-adapters.md` |
 | Presentation | Public-data boundaries, mobile status cards, semantic color, and illustration consent | `references/visual-media.md` |
 | Deterministic UI | Validates one public model and renders self-contained HTML or SVG | `scripts/render_panel.py` |
+| Runtime integrity | Generates auditable checks and validates, commits, or recovers state patches | `scripts/roll_check.py`, `scripts/campaign_runtime.py` |
 
 ## Installation
 
@@ -99,6 +106,8 @@ Other Agent runtimes that support directory-based skills can load the root `SKIL
 
 Campaigns start with an ordinary person or, for a balanced custom background, at most a Sequence 9 Beyonder with a real cost attached.
 
+New campaigns use the v1.6 state and event contracts. Installing a newer Skill never rewrites an existing campaign automatically; migration requires an explicit request and an appended migration event.
+
 ## Campaign persistence
 
 For a local single-player campaign, the engine maintains:
@@ -115,6 +124,21 @@ campaigns/
 ```
 
 `state.yaml` is the latest authoritative state. `events.jsonl` is an append-only audit trail. The journal contains only facts the character has experienced or confirmed. Hidden world state and character knowledge remain separate.
+
+The v1.6 runtime records goal evidence, clues and investigations, public stakes, RNG provenance, consequences, and old-value-checked state patches. Local agents can validate or recover a campaign with:
+
+```bash
+python3 scripts/campaign_runtime.py validate --campaign-dir campaigns/<campaign_id>
+python3 scripts/campaign_runtime.py recover --campaign-dir campaigns/<campaign_id>
+```
+
+The check helper can inspect calibrated odds or generate a real roll:
+
+```bash
+python3 scripts/roll_check.py odds --mode ordinary --target 100 --attribute 45 --skill 10
+python3 scripts/roll_check.py roll --mode ordinary --target 100 --attribute 45 --skill 10 \
+  --context evt-000042:inspect-door
+```
 
 Service deployments may map the same records to SQLite, PostgreSQL, or object storage, but must preserve version checks, idempotency, transaction order, and recovery semantics.
 
@@ -152,12 +176,25 @@ The UI does not use a universal MMO-style rarity ladder. Sealed Artifact grades,
 │   └── panel-example.png
 ├── references/
 │   ├── public-panel.schema.json
+│   ├── campaign-state.schema.json
+│   ├── campaign-event.schema.json
+│   ├── portable-anchor.schema.json
 │   ├── ruleset.md
 │   ├── runtime-and-storage.md
 │   ├── transport-adapters.md
 │   └── visual-media.md
-└── scripts/
-    └── render_panel.py
+├── scripts/
+│   ├── campaign_runtime.py
+│   ├── roll_check.py
+│   └── render_panel.py
+└── tests/
+    └── test_p0_runtime.py
+```
+
+Run the standard-library regression suite with:
+
+```bash
+python3 -m unittest discover -s tests -v
 ```
 
 ## Safety and privacy

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/lotm-text-game/portable-anchor.schema.json",
+  "title": "LOTM text game portable anchor v1.6",
+  "type": "object",
+  "required": [
+    "format_version",
+    "campaign_id",
+    "state_revision",
+    "last_event_id",
+    "ruleset_version",
+    "exported_at",
+    "contains_hidden_state",
+    "authoritative_state",
+    "recent_events",
+    "integrity"
+  ],
+  "properties": {
+    "format_version": {"const": "1.0"},
+    "campaign_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "state_revision": {"type": "integer", "minimum": 1},
+    "last_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
+    "ruleset_version": {"const": "1.6"},
+    "exported_at": {"type": "string", "minLength": 1, "maxLength": 80},
+    "contains_hidden_state": {"const": true},
+    "authoritative_state": {"type": "object"},
+    "recent_events": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["algorithm", "digest"],
+      "properties": {
+        "algorithm": {"const": "sha256-canonical-json"},
+        "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

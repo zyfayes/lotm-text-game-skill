@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/lotm-text-game/campaign-state.schema.json",
+  "title": "LOTM text game campaign state v1.6",
+  "$defs": {
+    "eventId": {
+      "type": ["string", "null"],
+      "pattern": "^evt-[0-9]{6,}$"
+    },
+    "stateEffect": {
+      "oneOf": [
+        {"type": "string", "minLength": 1, "maxLength": 120},
+        {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1, "maxLength": 120},
+            "source": {"type": ["string", "null"], "maxLength": 160},
+            "expires_at": {"type": ["string", "null"], "maxLength": 80}
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "successCondition": {
+      "type": "object",
+      "required": ["id", "description", "required", "status", "evidence_event_ids"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^condition-[A-Za-z0-9._-]+$"},
+        "description": {"type": "string", "minLength": 1, "maxLength": 240},
+        "required": {"type": "boolean"},
+        "status": {"enum": ["open", "met", "waived"]},
+        "evidence_event_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^evt-[0-9]{6,}$"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "clue": {
+      "type": "object",
+      "required": ["clue_id", "statement", "source", "confidence", "status", "discovered_event_id", "linked_investigation_ids", "corroborating_clue_ids", "verification_basis"],
+      "properties": {
+        "clue_id": {"type": "string", "pattern": "^clue-[A-Za-z0-9._-]+$"},
+        "statement": {"type": "string", "minLength": 1, "maxLength": 500},
+        "source": {"type": "string", "minLength": 1, "maxLength": 240},
+        "confidence": {"enum": ["传闻", "迹象", "可信", "证实"]},
+        "status": {"enum": ["open", "linked", "resolved", "disproved"]},
+        "discovered_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
+        "linked_investigation_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^investigation-[A-Za-z0-9._-]+$"}
+        },
+        "corroborating_clue_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^clue-[A-Za-z0-9._-]+$"}
+        },
+        "verification_basis": {"type": ["string", "null"], "minLength": 1, "maxLength": 300}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"confidence": {"const": "证实"}}, "required": ["confidence"]},
+          "then": {"properties": {"verification_basis": {"type": "string", "minLength": 1}}}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "investigation": {
+      "type": "object",
+      "required": ["investigation_id", "question", "status", "clue_ids", "available_route_ids", "current_conclusion"],
+      "properties": {
+        "investigation_id": {"type": "string", "pattern": "^investigation-[A-Za-z0-9._-]+$"},
+        "question": {"type": "string", "minLength": 1, "maxLength": 300},
+        "status": {"enum": ["open", "provisional", "resolved", "abandoned"]},
+        "clue_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^clue-[A-Za-z0-9._-]+$"}
+        },
+        "available_route_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 100}
+        },
+        "current_conclusion": {"type": ["string", "null"], "maxLength": 500}
+      },
+      "additionalProperties": false
+    },
+    "rollRecord": {
+      "type": "object",
+      "required": ["event_id", "context", "rng_method", "counter", "raw", "formula", "target", "base_result", "final_result", "overflow_edge", "seed_commitment", "platform_result_id"],
+      "properties": {
+        "event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
+        "context": {"type": "string", "minLength": 1, "maxLength": 240},
+        "rng_method": {"enum": ["system_csprng", "hmac_sha256_rejection_v1", "platform_verified"]},
+        "counter": {"type": ["integer", "null"], "minimum": 0},
+        "raw": {"type": "integer", "minimum": 1, "maximum": 100},
+        "formula": {"type": "string", "minLength": 1, "maxLength": 300},
+        "target": {"type": "integer", "minimum": 1},
+        "base_result": {"enum": ["大失败", "失败", "险成", "成功", "大成功"]},
+        "final_result": {"enum": ["大失败", "失败", "险成", "成功", "大成功"]},
+        "overflow_edge": {"type": "boolean"},
+        "seed_commitment": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "platform_result_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 240}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"rng_method": {"const": "hmac_sha256_rejection_v1"}}, "required": ["rng_method"]},
+          "then": {
+            "properties": {
+              "counter": {"type": "integer", "minimum": 0},
+              "seed_commitment": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "platform_result_id": {"const": null}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"rng_method": {"const": "system_csprng"}}, "required": ["rng_method"]},
+          "then": {"properties": {"counter": {"const": null}, "seed_commitment": {"const": null}, "platform_result_id": {"const": null}}}
+        },
+        {
+          "if": {"properties": {"rng_method": {"const": "platform_verified"}}, "required": ["rng_method"]},
+          "then": {
+            "properties": {
+              "counter": {"const": null},
+              "seed_commitment": {"const": null},
+              "platform_result_id": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      ],
+      "additionalProperties": true
+    }
+  },
+  "type": "object",
+  "required": ["runtime", "campaign", "player", "relations", "plot", "causality", "world", "knowledge", "discipline", "visuals", "roll_log"],
+  "properties": {
+    "runtime": {
+      "type": "object",
+      "required": ["schema_version", "state_revision", "last_event_id", "updated_at", "ruleset_version", "panel_renderer", "panel_template_version", "rng"],
+      "properties": {
+        "schema_version": {"const": "1.6"},
+        "state_revision": {"type": "integer", "minimum": 1},
+        "last_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
+        "updated_at": {"type": "string", "minLength": 1, "maxLength": 80},
+        "ruleset_version": {"const": "1.6"},
+        "panel_renderer": {"enum": ["html_snapshot", "svg_snapshot", "platform_rich_text", "text"]},
+        "panel_template_version": {"type": "string", "minLength": 1, "maxLength": 80},
+        "rng": {
+          "type": "object",
+          "required": ["method", "next_counter"],
+          "properties": {
+            "method": {"enum": ["system_csprng", "hmac_sha256_rejection_v1", "platform_verified"]},
+            "next_counter": {"type": "integer", "minimum": 0},
+            "seed_commitment": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+          },
+          "allOf": [
+            {
+              "if": {"properties": {"method": {"const": "hmac_sha256_rejection_v1"}}, "required": ["method"]},
+              "then": {"properties": {"seed_commitment": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}
+            },
+            {
+              "if": {"properties": {"method": {"enum": ["system_csprng", "platform_verified"]}}, "required": ["method"]},
+              "then": {"properties": {"next_counter": {"const": 0}, "seed_commitment": {"const": null}}}
+            }
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "campaign": {
+      "type": "object",
+      "required": ["id", "status", "turn", "world_time", "location", "difficulty", "mode_modifier", "opportunity_counter", "pacing_profile", "chapter", "meaningful_scenes"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "status": {"enum": ["active", "paused", "completed"]},
+        "turn": {"type": "integer", "minimum": 0},
+        "world_time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}(?::[0-9]{2})?$"},
+        "location": {"type": "string", "minLength": 1, "maxLength": 200},
+        "difficulty": {"enum": ["爽翻天", "普通", "地狱"]},
+        "mode_modifier": {"enum": [20, 0, -15]},
+        "opportunity_counter": {"type": "integer", "minimum": 0},
+        "pacing_profile": {"enum": ["紧凑", "标准", "长篇"]},
+        "chapter": {"type": "integer", "minimum": 1},
+        "meaningful_scenes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "player": {
+      "type": "object",
+      "required": ["name", "gender", "background", "identity", "pathway", "sequence", "acting", "attributes", "luck", "spirituality", "sanity", "pollution", "states", "skills", "money", "inventory", "sealed_items"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 80},
+        "gender": {"type": "string", "minLength": 1, "maxLength": 20},
+        "background": {"type": "string", "minLength": 1, "maxLength": 240},
+        "identity": {"type": "string", "minLength": 1, "maxLength": 160},
+        "pathway": {"type": "string", "minLength": 1, "maxLength": 80},
+        "sequence": {"type": "string", "minLength": 1, "maxLength": 80},
+        "acting": {"type": "string", "minLength": 1, "maxLength": 40},
+        "attributes": {
+          "type": "object",
+          "required": ["physique", "inspiration", "mind", "charm"],
+          "properties": {
+            "physique": {"type": "integer", "minimum": 0},
+            "inspiration": {"type": "integer", "minimum": 0},
+            "mind": {"type": "integer", "minimum": 0},
+            "charm": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "luck": {
+          "type": "object",
+          "required": ["base", "current", "modifiers"],
+          "properties": {
+            "base": {"type": "integer", "minimum": 0, "maximum": 100},
+            "current": {"type": "integer", "minimum": 0, "maximum": 100},
+            "modifiers": {"type": "array"}
+          },
+          "additionalProperties": false
+        },
+        "spirituality": {
+          "type": "object",
+          "required": ["current", "max"],
+          "properties": {
+            "current": {"type": "integer", "minimum": 0},
+            "max": {"type": "integer", "minimum": 1}
+          },
+          "additionalProperties": false
+        },
+        "sanity": {"type": "integer", "minimum": 0, "maximum": 100},
+        "pollution": {"type": "integer", "minimum": 0, "maximum": 100},
+        "states": {
+          "type": "object",
+          "required": ["body", "mind", "effects"],
+          "properties": {
+            "body": {"enum": ["健康", "轻伤", "重伤", "濒死", "失控倾向", "灵性枯竭"]},
+            "mind": {"enum": ["清醒", "紧张", "焦虑", "恍惚", "疯狂"]},
+            "effects": {"type": "array", "items": {"$ref": "#/$defs/stateEffect"}}
+          },
+          "additionalProperties": false
+        },
+        "skills": {"type": "object"},
+        "money": {
+          "type": "object",
+          "required": ["pounds", "soli", "pence"],
+          "properties": {
+            "pounds": {"type": "integer", "minimum": 0},
+            "soli": {"type": "integer", "minimum": 0, "maximum": 19},
+            "pence": {"type": "integer", "minimum": 0, "maximum": 11}
+          },
+          "additionalProperties": true
+        },
+        "inventory": {"type": "array"},
+        "sealed_items": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["npc", "level", "evidence", "last_interaction"],
+        "properties": {
+          "npc": {"type": "string", "minLength": 1, "maxLength": 100},
+          "level": {"enum": ["敌视", "戒备", "冷淡", "普通", "友好", "亲近", "信赖"]},
+          "evidence": {"type": "string", "minLength": 1, "maxLength": 500},
+          "last_interaction": {"type": "string", "minLength": 1, "maxLength": 100}
+        },
+        "additionalProperties": true
+      }
+    },
+    "plot": {
+      "type": "object",
+      "required": ["life_goal", "completed_goals", "main", "current_action", "open_threads", "clues", "investigations", "deadlines"],
+      "properties": {
+        "life_goal": {
+          "type": "object",
+          "required": ["id", "text", "category", "status", "success_conditions", "progress_summary", "change_conditions", "chosen_at_event_id", "criteria_met_at_event_id"],
+          "properties": {
+            "id": {"type": ["string", "null"], "pattern": "^goal-[A-Za-z0-9._-]+$"},
+            "text": {"type": ["string", "null"], "maxLength": 400},
+            "category": {"type": ["string", "null"], "maxLength": 80},
+            "status": {"enum": ["pending", "active", "criteria_met", "achieved", "abandoned"]},
+            "success_conditions": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/successCondition"}},
+            "progress_summary": {"type": ["string", "null"], "maxLength": 500},
+            "change_conditions": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 240}},
+            "chosen_at_event_id": {"$ref": "#/$defs/eventId"},
+            "criteria_met_at_event_id": {"$ref": "#/$defs/eventId"}
+          },
+          "additionalProperties": false
+        },
+        "completed_goals": {"type": "array"},
+        "main": {"type": "string", "maxLength": 500},
+        "current_action": {"type": "string", "maxLength": 500},
+        "open_threads": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 300}},
+        "clues": {"type": "array", "items": {"$ref": "#/$defs/clue"}},
+        "investigations": {"type": "array", "items": {"$ref": "#/$defs/investigation"}},
+        "deadlines": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "causality": {"type": "array"},
+    "world": {"type": "object"},
+    "knowledge": {
+      "type": "object",
+      "required": ["character_known", "engine_truth", "game_supplements"],
+      "properties": {
+        "character_known": {"type": "array"},
+        "engine_truth": {"type": "array"},
+        "game_supplements": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "discipline": {
+      "type": "object",
+      "required": ["cheat_level", "heaven_brand", "warnings"],
+      "properties": {
+        "cheat_level": {"type": "integer", "minimum": 0, "maximum": 4},
+        "heaven_brand": {"type": "boolean"},
+        "warnings": {"type": "array"}
+      },
+      "additionalProperties": false
+    },
+    "visuals": {"type": "object"},
+    "roll_log": {"type": "array", "items": {"$ref": "#/$defs/rollRecord"}}
+  },
+  "additionalProperties": false
+}
