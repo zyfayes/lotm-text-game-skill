@@ -2,9 +2,11 @@
 
 Read this reference when the campaign runs outside a single local workspace, when multiple campaigns or users exist, or when recovery, migration, concurrency, or database storage matters.
 
-The full game semantics and file responsibilities remain defined by [ruleset.md](ruleset.md). This document maps those logical records to portable runtimes.
+The game semantics and their authority map are defined by [ruleset.md](ruleset.md). This document only maps the continuity contract to portable runtimes.
 
-New v1.6 records conform to [campaign-state.schema.json](campaign-state.schema.json), [campaign-event.schema.json](campaign-event.schema.json), and [portable-anchor.schema.json](portable-anchor.schema.json). These contracts do not authorize automatic migration of an older campaign.
+New v1.7 records conform to [campaign-state.schema.json](campaign-state.schema.json), [campaign-event.schema.json](campaign-event.schema.json), and [portable-anchor.schema.json](portable-anchor.schema.json). Legacy v1.6 records remain valid against the `.v1.6.schema.json` files. Neither contract authorizes automatic migration of an older campaign.
+
+Pre-contract v1.2 through v1.5 ledgers have no compatible `state_patch` transaction schema. The bundled validator can identify their version, verify their basic event and revision continuity, and report `valid_legacy_read_only`; commit, recovery, initialization, and portable-anchor export remain disabled until an explicit migration creates a writable contract. This protects old campaigns without pretending they already satisfy v1.6.
 
 ## Logical records
 
@@ -37,11 +39,11 @@ Examples:
 
 ```text
 local:codex:example-project:0:single
-telegram:example-bot:example-group:example-thread:shared
+telegram:example-bot:example-group:example-thread:controller-example-user
 telegram:example-bot:example-user-chat:0:example-user
 ```
 
-Private chats normally use one campaign per chat. Group and forum chats must explicitly choose either a shared campaign or one campaign per player. Never use one global active pointer for an entire bot service.
+Private chats normally use one campaign per chat. Group and forum chats must choose either one campaign per player or a shared-view campaign with one configured controller. v1.7 does not support multiple players concurrently controlling one protagonist; spectators cannot create game events. Never use one global active pointer for an entire bot service.
 
 ## Local filesystem profile
 
@@ -84,6 +86,7 @@ processed_ingress(scope_key, ingress_id, result_event_id)
 transport_outbox(outbox_id, campaign_id, event_id, payload, status, platform_message_id)
 campaign_media(media_id, campaign_id, event_id, kind, public_facts_hash, platform_file_id)
 campaign_rng(campaign_id, method, next_counter, seed_commitment, secret_ref)
+campaign_controllers(scope_key, actor_id, status)
 ```
 
 The physical schema may vary. The uniqueness and transaction constraints may not:
@@ -91,24 +94,26 @@ The physical schema may vary. The uniqueness and transaction constraints may not
 - unique `(campaign_id, event_id)`
 - unique `(scope_key, ingress_id)`
 - one active campaign pointer per scope
+- at most one active controller per v1.7 single-protagonist scope
 - state commit uses expected `state_revision`
 - one outbox record per intended message or media item
 
 ## Turn transaction
 
-1. Deduplicate the transport ingress identifier.
-2. Lock the campaign scope or begin a serializable transaction.
-3. Read active campaign, latest state, and last event.
-4. Recover any event appended after the last committed state.
-5. For a risky action, construct and deliver the public stakes specification; allow the player to revise an unrolled approach. This pre-roll exchange does not create a game event or advance world time.
-6. Generate the raw die through an approved RNG and immediately bind it to a stable context and counter.
-7. Adjudicate once and produce one primary event containing stakes, RNG metadata, consequences, and an old-value-checked `state_patch`.
-8. Append the complete event.
-9. Apply the patch and compare-and-swap state from the expected revision to the next revision.
-10. Update player-visible documents.
-11. Create transport outbox records in the same transaction when possible.
-12. Commit before sending messages.
-13. Deliver outbox items idempotently and record platform message identifiers.
+1. Resolve the scope and verify that the actor is the configured controller. Spectator input may be stored as discussion but cannot enter adjudication.
+2. Deduplicate the transport ingress identifier.
+3. Lock the campaign scope or begin a serializable transaction.
+4. Read active campaign, latest state, and last event.
+5. Recover any event appended after the last committed state.
+6. For a risky action, construct and deliver the public stakes specification; allow the player to revise an unrolled approach. This pre-roll exchange does not create a game event or advance world time.
+7. Generate the raw die through an approved RNG and immediately bind it to a stable context and counter.
+8. Adjudicate once and produce one primary event containing stakes, RNG metadata, consequences, and an old-value-checked `state_patch`.
+9. Append the complete event.
+10. Apply the patch and compare-and-swap state from the expected revision to the next revision.
+11. Update player-visible documents.
+12. Create transport outbox records in the same transaction when possible.
+13. Commit before sending messages.
+14. Deliver outbox items idempotently and record platform message identifiers.
 
 If delivery fails after commit, retry delivery from the outbox. Never re-adjudicate the action.
 
@@ -161,4 +166,4 @@ Hidden engine records must be accessible to the adjudicator and inaccessible to 
 
 ## Portable fallback
 
-If durable storage is unavailable, emit the complete latest anchor required by the ruleset and mark the campaign as degraded. The v1.6 anchor contains authoritative hidden state, recent events, and a canonical SHA-256 digest; warn that it contains spoilers and do not expose it in a group chat. Do not claim persistence. When durable storage returns, verify the digest, import the anchor once, create a migration event, and resume append-only history.
+If durable storage is unavailable, emit the complete latest anchor required by the ruleset and mark the campaign as degraded. The v1.7 anchor uses format 1.1 and contains authoritative hidden state, recent events, and a canonical SHA-256 digest; warn that it contains spoilers and do not expose it in a group chat. Do not claim persistence. When durable storage returns, verify the digest, import the anchor once, create a migration event, and resume append-only history.

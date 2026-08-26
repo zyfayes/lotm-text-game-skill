@@ -33,6 +33,22 @@ MIND_STATES = {"清醒", "紧张", "焦虑", "恍惚", "疯狂"}
 RELATION_LEVELS = {"敌视", "戒备", "冷淡", "普通", "友好", "亲近", "信赖"}
 GOAL_STATUSES = {"pending", "active", "criteria_met", "achieved", "abandoned"}
 CLUE_CONFIDENCE = {"传闻", "迹象", "可信", "证实"}
+WRITABLE_VERSIONS = {"1.6", "1.7"}
+LEGACY_READ_ONLY_VERSIONS = {"1.2", "1.3", "1.4", "1.5"}
+V17_STATE_KEYS = {"social", "economy", "commitments", "preferences"}
+MEMBERSHIP_STATUSES = {"outsider", "candidate", "member", "suspended", "expelled", "hostile"}
+COMMITMENT_KINDS = {"favor", "contract", "oath", "promise", "leverage"}
+COMMITMENT_STATUSES = {"open", "fulfilled", "breached", "released", "expired"}
+CANON_STATUSES = {
+    "primary_canon",
+    "official_supplement",
+    "licensed_adaptation",
+    "secondary_lead",
+    "game_supplement",
+    "unknown",
+    "disputed",
+}
+CHAPTER_DOMAINS = {"goal", "relations", "clues", "world_clocks", "social", "economy", "commitments"}
 PROTECTED_PATCH_PATHS = {
     "/runtime/state_revision",
     "/runtime/last_event_id",
@@ -257,19 +273,178 @@ def mapping_at(value: Any, key: str, errors: List[str], path: str) -> Dict[str, 
     return child
 
 
+def normalize_contract_version(value: Any) -> Optional[str]:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return None
+
+
+def state_contract_version(state: Any) -> Optional[str]:
+    if not isinstance(state, dict):
+        return None
+    runtime = state.get("runtime")
+    if not isinstance(runtime, dict):
+        return None
+    return normalize_contract_version(runtime.get("schema_version"))
+
+
+def event_contract_version(event: Any) -> Optional[str]:
+    if not isinstance(event, dict):
+        return None
+    version = event.get("schema_version")
+    if version is None:
+        return "1.6"
+    return version if isinstance(version, str) else None
+
+
+def require_writable_version(version: Optional[str], operation: str) -> None:
+    if version in LEGACY_READ_ONLY_VERSIONS:
+        raise RuntimeErrorDetail(
+            f"{operation} is disabled for legacy v{version}; preserve it read-only or explicitly migrate it first"
+        )
+    if version not in WRITABLE_VERSIONS:
+        raise RuntimeErrorDetail(f"{operation} requires a supported campaign contract")
+
+
+def validate_legacy_state(state: Dict[str, Any], version: str) -> List[str]:
+    errors: List[str] = []
+    for key in ("runtime", "campaign", "player", "plot", "relations", "causality", "world", "knowledge", "discipline", "visuals", "roll_log"):
+        add_error(errors, key in state, f"legacy state missing key: {key}")
+    runtime = state.get("runtime")
+    if not isinstance(runtime, dict):
+        return errors + ["legacy runtime must be an object"]
+    add_error(errors, normalize_contract_version(runtime.get("schema_version")) == version, "legacy schema_version is inconsistent")
+    ruleset_version = normalize_contract_version(runtime.get("ruleset_version"))
+    add_error(errors, ruleset_version is None or ruleset_version == version, "legacy ruleset_version is inconsistent")
+    add_error(errors, isinstance(runtime.get("state_revision"), int) and runtime.get("state_revision", 0) >= 1, "legacy state_revision must be positive")
+    add_error(errors, valid_event_id(runtime.get("last_event_id")), "legacy last_event_id is invalid")
+    add_error(errors, parse_real_timestamp(runtime.get("updated_at")) is not None, "legacy updated_at is invalid")
+    campaign = state.get("campaign")
+    if not isinstance(campaign, dict):
+        errors.append("legacy campaign must be an object")
+    else:
+        add_error(errors, isinstance(campaign.get("id"), str) and bool(CAMPAIGN_ID.fullmatch(campaign.get("id", ""))), "legacy campaign id is invalid")
+        add_error(errors, enum_value(campaign.get("status"), {"active", "paused", "completed"}), "legacy campaign status is invalid")
+        add_error(errors, isinstance(campaign.get("turn"), int) and campaign.get("turn", -1) >= 0, "legacy campaign turn is invalid")
+        add_error(errors, parse_world_time(campaign.get("world_time")) is not None, "legacy campaign world_time is invalid")
+    player = state.get("player")
+    add_error(errors, isinstance(player, dict) and isinstance(player.get("name"), str) and bool(player.get("name", "").strip()), "legacy player name is required")
+    add_error(errors, isinstance(state.get("plot"), dict), "legacy plot must be an object")
+    add_error(errors, isinstance(state.get("relations"), list), "legacy relations must be an array")
+    add_error(errors, isinstance(state.get("roll_log"), list), "legacy roll_log must be an array")
+    return errors
+
+
+def validate_legacy_event_sequence(events: List[Dict[str, Any]]) -> List[str]:
+    errors: List[str] = []
+    add_error(errors, bool(events), "legacy event history must not be empty")
+    previous_number: Optional[int] = None
+    previous_revision = 0
+    previous_world_time: Optional[dt.datetime] = None
+    previous_created_at: Optional[dt.datetime] = None
+    seen_ids = set()
+    for index, event in enumerate(events):
+        path = f"legacy events/{index}"
+        if not isinstance(event, dict):
+            errors.append(f"{path} must be an object")
+            continue
+        event_id = event.get("event_id")
+        add_error(errors, valid_event_id(event_id), f"{path}/event_id is invalid")
+        if valid_event_id(event_id):
+            add_error(errors, event_id not in seen_ids, f"duplicate legacy event id: {event_id}")
+            seen_ids.add(event_id)
+            number = event_number(event_id)
+            if previous_number is not None:
+                add_error(errors, number > previous_number, f"legacy event ids are not increasing at {event_id}")
+            previous_number = number
+        revision = event.get("state_revision")
+        add_error(errors, isinstance(revision, int) and revision == previous_revision + 1, f"{path}/state_revision is not contiguous")
+        if isinstance(revision, int):
+            previous_revision = revision
+        add_error(errors, isinstance(event.get("type"), str) and bool(re.fullmatch(r"[a-z][a-z0-9_]*", event.get("type", ""))), f"{path}/type is invalid")
+        add_error(errors, isinstance(event.get("action"), str) and bool(event.get("action", "").strip()), f"{path}/action is required")
+        add_error(errors, isinstance(event.get("deltas"), dict), f"{path}/deltas must be an object")
+        add_error(errors, event.get("roll") is None or isinstance(event.get("roll"), dict), f"{path}/roll is invalid")
+        world_time = parse_world_time(event.get("world_time"))
+        add_error(errors, world_time is not None, f"{path}/world_time is invalid")
+        if world_time is not None and previous_world_time is not None:
+            add_error(errors, world_time >= previous_world_time, f"legacy world time moved backward at {event_id}")
+        if world_time is not None:
+            previous_world_time = world_time
+        created_at = parse_real_timestamp(event.get("created_at"))
+        add_error(errors, created_at is not None, f"{path}/created_at is invalid")
+        if created_at is not None and previous_created_at is not None:
+            add_error(errors, created_at >= previous_created_at, f"legacy real time moved backward at {event_id}")
+        if created_at is not None:
+            previous_created_at = created_at
+    return errors
+
+
+def validate_legacy_consistency(state: Dict[str, Any], events: List[Dict[str, Any]], version: str) -> List[str]:
+    errors = validate_legacy_state(state, version)
+    errors.extend(validate_legacy_event_sequence(events))
+    if events:
+        runtime = state.get("runtime", {})
+        campaign = state.get("campaign", {})
+        last = events[-1]
+        add_error(errors, runtime.get("last_event_id") == last.get("event_id"), "legacy state last_event_id does not match final event")
+        add_error(errors, runtime.get("state_revision") == last.get("state_revision"), "legacy state_revision does not match final event")
+        add_error(errors, campaign.get("world_time") == last.get("world_time"), "legacy campaign world_time does not match final event")
+    return errors
+
+
+def valid_string_list(value: Any, *, minimum: int = 0) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) >= minimum
+        and all(isinstance(item, str) and bool(item.strip()) for item in value)
+    )
+
+
+def valid_event_id_list(value: Any, *, minimum: int = 1) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) >= minimum
+        and len(value) == len(set(value))
+        and all(valid_event_id(item) for item in value)
+    )
+
+
+def unique_named_ids(items: Any, field: str) -> bool:
+    if not isinstance(items, list):
+        return False
+    values = [item.get(field) for item in items if isinstance(item, dict)]
+    return len(values) == len(items) and len(values) == len(set(values))
+
+
+def money_to_pence(money: Any) -> Optional[int]:
+    if not isinstance(money, dict):
+        return None
+    pounds, soli, pence = money.get("pounds"), money.get("soli"), money.get("pence")
+    if not all(isinstance(item, int) and not isinstance(item, bool) for item in (pounds, soli, pence)):
+        return None
+    return pounds * 240 + soli * 12 + pence
+
+
 def validate_state(state: Any) -> List[str]:
     errors: List[str] = []
     if not isinstance(state, dict):
         return ["state must be an object"]
-    state_keys = ("runtime", "campaign", "player", "relations", "plot", "causality", "world", "knowledge", "discipline", "visuals", "roll_log")
+    version = state_contract_version(state)
+    if version in LEGACY_READ_ONLY_VERSIONS:
+        return validate_legacy_state(state, version)
+    base_state_keys = {"runtime", "campaign", "player", "relations", "plot", "causality", "world", "knowledge", "discipline", "visuals", "roll_log"}
+    state_keys = base_state_keys | (V17_STATE_KEYS if version == "1.7" else set())
     for key in state_keys:
         add_error(errors, key in state, f"missing state key: {key}")
     add_error(errors, set(state).issubset(state_keys), "state contains an unsupported top-level key")
 
     runtime = mapping_at(state, "runtime", errors, "")
     require_fields(runtime, ("schema_version", "state_revision", "last_event_id", "updated_at", "ruleset_version", "panel_renderer", "panel_template_version", "rng"), "/runtime", errors)
-    add_error(errors, runtime.get("schema_version") == "1.6", "runtime/schema_version must be string 1.6")
-    add_error(errors, runtime.get("ruleset_version") == "1.6", "runtime/ruleset_version must be string 1.6")
+    add_error(errors, version in WRITABLE_VERSIONS, "runtime/schema_version must be a supported writable version")
+    add_error(errors, runtime.get("ruleset_version") == version, "runtime/ruleset_version must match schema_version")
     revision = runtime.get("state_revision")
     add_error(errors, isinstance(revision, int) and revision >= 1, "runtime/state_revision must be a positive integer")
     add_error(errors, valid_event_id(runtime.get("last_event_id")), "runtime/last_event_id is invalid")
@@ -290,7 +465,10 @@ def validate_state(state: Any) -> List[str]:
             add_error(errors, rng.get("next_counter") == 0, "non-HMAC RNG next_counter must remain 0")
 
     campaign = mapping_at(state, "campaign", errors, "")
-    require_fields(campaign, ("id", "status", "turn", "world_time", "location", "difficulty", "mode_modifier", "opportunity_counter", "pacing_profile", "chapter", "meaningful_scenes"), "/campaign", errors)
+    campaign_fields = ["id", "status", "turn", "world_time", "location", "difficulty", "mode_modifier", "opportunity_counter", "pacing_profile", "chapter", "meaningful_scenes"]
+    if version == "1.7":
+        campaign_fields.append("play_mode")
+    require_fields(campaign, campaign_fields, "/campaign", errors)
     campaign_id = campaign.get("id")
     add_error(errors, isinstance(campaign_id, str) and bool(CAMPAIGN_ID.fullmatch(campaign_id)), "campaign/id is invalid")
     add_error(errors, enum_value(campaign.get("status"), {"active", "paused", "completed"}), "campaign/status is invalid")
@@ -305,6 +483,8 @@ def validate_state(state: Any) -> List[str]:
     add_error(errors, isinstance(campaign.get("opportunity_counter"), int) and campaign.get("opportunity_counter", -1) >= 0, "campaign/opportunity_counter must be non-negative")
     add_error(errors, isinstance(campaign.get("chapter"), int) and campaign.get("chapter", 0) >= 1, "campaign/chapter must be positive")
     add_error(errors, isinstance(campaign.get("meaningful_scenes"), int) and campaign.get("meaningful_scenes", -1) >= 0, "campaign/meaningful_scenes must be non-negative")
+    if version == "1.7":
+        add_error(errors, campaign.get("play_mode") == "single_protagonist", "campaign/play_mode must be single_protagonist")
 
     player = mapping_at(state, "player", errors, "")
     require_fields(player, ("name", "gender", "background", "identity", "pathway", "sequence", "acting", "attributes", "luck", "spirituality", "sanity", "pollution", "states", "skills", "money", "inventory", "sealed_items"), "/player", errors)
@@ -353,8 +533,158 @@ def validate_state(state: Any) -> List[str]:
             add_error(errors, isinstance(relation.get("evidence"), str) and bool(relation.get("evidence", "").strip()), f"relations/{index}/evidence is required")
             add_error(errors, isinstance(relation.get("last_interaction"), str) and bool(relation.get("last_interaction", "").strip()), f"relations/{index}/last_interaction is required")
 
+    if version == "1.7":
+        social = mapping_at(state, "social", errors, "")
+        require_fields(social, ("statuses", "organizations"), "/social", errors)
+        statuses = social.get("statuses")
+        organizations = social.get("organizations")
+        add_error(errors, isinstance(statuses, list), "social/statuses must be an array")
+        add_error(errors, unique_named_ids(statuses, "status_id"), "social status ids must be unique")
+        if isinstance(statuses, list):
+            for index, status in enumerate(statuses):
+                if not isinstance(status, dict):
+                    errors.append(f"social/statuses/{index} must be an object")
+                    continue
+                require_fields(status, ("status_id", "context", "label", "standing", "evidence_event_ids"), f"/social/statuses/{index}", errors)
+                add_error(errors, valid_named_id(status.get("status_id"), "status-"), f"social/statuses/{index}/status_id is invalid")
+                for field in ("context", "label"):
+                    add_error(errors, isinstance(status.get(field), str) and bool(status.get(field, "").strip()), f"social/statuses/{index}/{field} is required")
+                add_error(errors, isinstance(status.get("standing"), int) and -100 <= status.get("standing", -101) <= 100, f"social/statuses/{index}/standing must be from -100 to 100")
+                add_error(errors, valid_event_id_list(status.get("evidence_event_ids")), f"social/statuses/{index}/evidence_event_ids is invalid")
+        add_error(errors, isinstance(organizations, list), "social/organizations must be an array")
+        add_error(errors, unique_named_ids(organizations, "organization_id"), "organization ids must be unique")
+        if isinstance(organizations, list):
+            for index, organization in enumerate(organizations):
+                if not isinstance(organization, dict):
+                    errors.append(f"social/organizations/{index} must be an object")
+                    continue
+                require_fields(
+                    organization,
+                    ("organization_id", "name", "membership_status", "rank", "title", "reputation", "heat", "permissions", "commitment_ids", "evidence_event_ids", "last_changed_event_id"),
+                    f"/social/organizations/{index}",
+                    errors,
+                )
+                add_error(errors, valid_named_id(organization.get("organization_id"), "org-"), f"social/organizations/{index}/organization_id is invalid")
+                add_error(errors, isinstance(organization.get("name"), str) and bool(organization.get("name", "").strip()), f"social/organizations/{index}/name is required")
+                add_error(errors, enum_value(organization.get("membership_status"), MEMBERSHIP_STATUSES), f"social/organizations/{index}/membership_status is invalid")
+                add_error(errors, organization.get("rank") is None or (isinstance(organization.get("rank"), int) and organization.get("rank", -1) >= 0), f"social/organizations/{index}/rank is invalid")
+                add_error(errors, organization.get("title") is None or isinstance(organization.get("title"), str), f"social/organizations/{index}/title is invalid")
+                add_error(errors, isinstance(organization.get("reputation"), int) and -100 <= organization.get("reputation", -101) <= 100, f"social/organizations/{index}/reputation must be from -100 to 100")
+                add_error(errors, isinstance(organization.get("heat"), int) and 0 <= organization.get("heat", -1) <= 100, f"social/organizations/{index}/heat must be from 0 to 100")
+                add_error(errors, valid_string_list(organization.get("permissions")), f"social/organizations/{index}/permissions must be a string array")
+                commitment_ids = organization.get("commitment_ids")
+                valid_commitment_ids = isinstance(commitment_ids, list) and len(commitment_ids) == len(set(commitment_ids)) and all(valid_named_id(item, "commitment-") for item in commitment_ids)
+                add_error(errors, valid_commitment_ids, f"social/organizations/{index}/commitment_ids is invalid")
+                add_error(errors, valid_event_id_list(organization.get("evidence_event_ids")), f"social/organizations/{index}/evidence_event_ids is invalid")
+                add_error(errors, valid_event_id(organization.get("last_changed_event_id")), f"social/organizations/{index}/last_changed_event_id is invalid")
+
+        economy = mapping_at(state, "economy", errors, "")
+        require_fields(economy, ("accounting_unit", "settlement_period", "next_settlement_at", "last_settlement_event_id", "income_streams", "recurring_costs", "debts", "scarcity"), "/economy", errors)
+        add_error(errors, economy.get("accounting_unit") == "pence", "economy/accounting_unit must be pence")
+        add_error(errors, enum_value(economy.get("settlement_period"), {"world_turn", "weekly"}), "economy/settlement_period is invalid")
+        next_settlement = economy.get("next_settlement_at")
+        add_error(errors, next_settlement is None or parse_world_time(next_settlement) is not None, "economy/next_settlement_at must be null or world time")
+        add_error(errors, economy.get("last_settlement_event_id") is None or valid_event_id(economy.get("last_settlement_event_id")), "economy/last_settlement_event_id is invalid")
+        flow_ids: List[str] = []
+        for collection_name in ("income_streams", "recurring_costs"):
+            flows = economy.get(collection_name)
+            add_error(errors, isinstance(flows, list), f"economy/{collection_name} must be an array")
+            if not isinstance(flows, list):
+                continue
+            for index, flow in enumerate(flows):
+                if not isinstance(flow, dict):
+                    errors.append(f"economy/{collection_name}/{index} must be an object")
+                    continue
+                require_fields(flow, ("flow_id", "name", "amount_pence", "cadence", "next_due_at", "status", "evidence_event_id"), f"/economy/{collection_name}/{index}", errors)
+                flow_id = flow.get("flow_id")
+                add_error(errors, valid_named_id(flow_id, "flow-"), f"economy/{collection_name}/{index}/flow_id is invalid")
+                if isinstance(flow_id, str):
+                    flow_ids.append(flow_id)
+                add_error(errors, isinstance(flow.get("name"), str) and bool(flow.get("name", "").strip()), f"economy/{collection_name}/{index}/name is required")
+                add_error(errors, isinstance(flow.get("amount_pence"), int) and flow.get("amount_pence", -1) >= 0, f"economy/{collection_name}/{index}/amount_pence must be non-negative")
+                add_error(errors, enum_value(flow.get("cadence"), {"one_time", "world_turn", "weekly", "monthly"}), f"economy/{collection_name}/{index}/cadence is invalid")
+                add_error(errors, flow.get("next_due_at") is None or parse_world_time(flow.get("next_due_at")) is not None, f"economy/{collection_name}/{index}/next_due_at is invalid")
+                add_error(errors, enum_value(flow.get("status"), {"active", "paused", "ended"}), f"economy/{collection_name}/{index}/status is invalid")
+                add_error(errors, valid_event_id(flow.get("evidence_event_id")), f"economy/{collection_name}/{index}/evidence_event_id is invalid")
+        add_error(errors, len(flow_ids) == len(set(flow_ids)), "economy flow ids must be unique")
+        debts = economy.get("debts")
+        add_error(errors, isinstance(debts, list), "economy/debts must be an array")
+        add_error(errors, unique_named_ids(debts, "debt_id"), "economy debt ids must be unique")
+        if isinstance(debts, list):
+            for index, debt in enumerate(debts):
+                if not isinstance(debt, dict):
+                    errors.append(f"economy/debts/{index} must be an object")
+                    continue
+                require_fields(debt, ("debt_id", "creditor", "principal_pence", "due_at", "status", "commitment_id", "evidence_event_ids"), f"/economy/debts/{index}", errors)
+                add_error(errors, valid_named_id(debt.get("debt_id"), "debt-"), f"economy/debts/{index}/debt_id is invalid")
+                add_error(errors, isinstance(debt.get("creditor"), str) and bool(debt.get("creditor", "").strip()), f"economy/debts/{index}/creditor is required")
+                add_error(errors, isinstance(debt.get("principal_pence"), int) and debt.get("principal_pence", -1) >= 0, f"economy/debts/{index}/principal_pence must be non-negative")
+                add_error(errors, debt.get("due_at") is None or parse_world_time(debt.get("due_at")) is not None, f"economy/debts/{index}/due_at is invalid")
+                add_error(errors, enum_value(debt.get("status"), {"current", "overdue", "settled", "defaulted", "forgiven"}), f"economy/debts/{index}/status is invalid")
+                add_error(errors, debt.get("commitment_id") is None or valid_named_id(debt.get("commitment_id"), "commitment-"), f"economy/debts/{index}/commitment_id is invalid")
+                add_error(errors, valid_event_id_list(debt.get("evidence_event_ids")), f"economy/debts/{index}/evidence_event_ids is invalid")
+        scarcity = economy.get("scarcity")
+        add_error(errors, isinstance(scarcity, list), "economy/scarcity must be an array")
+        if isinstance(scarcity, list):
+            categories: List[str] = []
+            for index, item in enumerate(scarcity):
+                if not isinstance(item, dict):
+                    errors.append(f"economy/scarcity/{index} must be an object")
+                    continue
+                require_fields(item, ("category", "level", "reason", "evidence_event_id"), f"/economy/scarcity/{index}", errors)
+                category = item.get("category")
+                add_error(errors, isinstance(category, str) and bool(category.strip()), f"economy/scarcity/{index}/category is required")
+                if isinstance(category, str):
+                    categories.append(category)
+                add_error(errors, enum_value(item.get("level"), {"normal", "tight", "scarce", "unavailable"}), f"economy/scarcity/{index}/level is invalid")
+                add_error(errors, isinstance(item.get("reason"), str) and bool(item.get("reason", "").strip()), f"economy/scarcity/{index}/reason is required")
+                add_error(errors, valid_event_id(item.get("evidence_event_id")), f"economy/scarcity/{index}/evidence_event_id is invalid")
+            add_error(errors, len(categories) == len(set(categories)), "economy scarcity categories must be unique")
+
+        commitments = state.get("commitments")
+        add_error(errors, isinstance(commitments, list), "commitments must be an array")
+        add_error(errors, unique_named_ids(commitments, "commitment_id"), "commitment ids must be unique")
+        if isinstance(commitments, list):
+            for index, commitment in enumerate(commitments):
+                if not isinstance(commitment, dict):
+                    errors.append(f"commitments/{index} must be an object")
+                    continue
+                require_fields(commitment, ("commitment_id", "kind", "summary", "parties", "owed_by", "owed_to", "terms", "status", "due_at", "linked_organization_id", "evidence_event_ids", "breach_event_id"), f"/commitments/{index}", errors)
+                add_error(errors, valid_named_id(commitment.get("commitment_id"), "commitment-"), f"commitments/{index}/commitment_id is invalid")
+                add_error(errors, enum_value(commitment.get("kind"), COMMITMENT_KINDS), f"commitments/{index}/kind is invalid")
+                add_error(errors, isinstance(commitment.get("summary"), str) and bool(commitment.get("summary", "").strip()), f"commitments/{index}/summary is required")
+                parties = commitment.get("parties")
+                add_error(errors, valid_string_list(parties, minimum=2) and len(parties) == len(set(parties)), f"commitments/{index}/parties requires at least two unique parties")
+                for field in ("owed_by", "owed_to"):
+                    add_error(errors, isinstance(commitment.get(field), str) and bool(commitment.get(field, "").strip()), f"commitments/{index}/{field} is required")
+                if isinstance(parties, list):
+                    add_error(errors, commitment.get("owed_by") in parties, f"commitments/{index}/owed_by must be a party")
+                    add_error(errors, commitment.get("owed_to") in parties, f"commitments/{index}/owed_to must be a party")
+                    add_error(errors, commitment.get("owed_by") != commitment.get("owed_to"), f"commitments/{index} cannot be owed to the same party")
+                add_error(errors, valid_string_list(commitment.get("terms"), minimum=1), f"commitments/{index}/terms is invalid")
+                add_error(errors, enum_value(commitment.get("status"), COMMITMENT_STATUSES), f"commitments/{index}/status is invalid")
+                add_error(errors, commitment.get("due_at") is None or parse_world_time(commitment.get("due_at")) is not None, f"commitments/{index}/due_at is invalid")
+                add_error(errors, commitment.get("linked_organization_id") is None or valid_named_id(commitment.get("linked_organization_id"), "org-"), f"commitments/{index}/linked_organization_id is invalid")
+                add_error(errors, valid_event_id_list(commitment.get("evidence_event_ids")), f"commitments/{index}/evidence_event_ids is invalid")
+                add_error(errors, commitment.get("breach_event_id") is None or valid_event_id(commitment.get("breach_event_id")), f"commitments/{index}/breach_event_id is invalid")
+                if commitment.get("status") == "breached":
+                    add_error(errors, valid_event_id(commitment.get("breach_event_id")), f"breached commitment {commitment.get('commitment_id')} requires breach_event_id")
+
+        preferences = mapping_at(state, "preferences", errors, "")
+        require_fields(preferences, ("horror", "gore", "romance", "canon_spoilers", "hard_limits", "updated_at_event_id"), "/preferences", errors)
+        add_error(errors, enum_value(preferences.get("horror"), {"low", "standard", "high"}), "preferences/horror is invalid")
+        add_error(errors, enum_value(preferences.get("gore"), {"off", "restrained", "explicit"}), "preferences/gore is invalid")
+        add_error(errors, enum_value(preferences.get("romance"), {"off", "ask", "enabled"}), "preferences/romance is invalid")
+        add_error(errors, enum_value(preferences.get("canon_spoilers"), {"character_only", "player_confirmed_scope", "full_meta"}), "preferences/canon_spoilers is invalid")
+        hard_limits = preferences.get("hard_limits")
+        add_error(errors, valid_string_list(hard_limits) and len(hard_limits) == len(set(hard_limits)), "preferences/hard_limits must be unique strings")
+        add_error(errors, valid_event_id(preferences.get("updated_at_event_id")), "preferences/updated_at_event_id is invalid")
+
     plot = mapping_at(state, "plot", errors, "")
-    require_fields(plot, ("life_goal", "completed_goals", "main", "current_action", "open_threads", "clues", "investigations", "deadlines"), "/plot", errors)
+    plot_fields = ["life_goal", "completed_goals", "main", "current_action", "open_threads", "clues", "investigations", "deadlines"]
+    if version == "1.7":
+        plot_fields.extend(("chapter", "chapter_history"))
+    require_fields(plot, plot_fields, "/plot", errors)
     add_error(errors, isinstance(plot.get("completed_goals"), list), "plot/completed_goals must be an array")
     add_error(errors, isinstance(plot.get("main"), str), "plot/main must be a string")
     add_error(errors, isinstance(plot.get("current_action"), str), "plot/current_action must be a string")
@@ -471,6 +801,50 @@ def validate_state(state: Any) -> List[str]:
             if isinstance(corroborating, list) and all(isinstance(item, str) for item in corroborating):
                 add_error(errors, all(item in known_clues and item != clue_id for item in corroborating), f"clue {clue_id} has an invalid corroborating clue")
 
+    if version == "1.7":
+        chapter = mapping_at(plot, "chapter", errors, "/plot")
+        require_fields(chapter, ("chapter_id", "number", "title", "status", "core_question", "pressure_source", "opened_at_event_id", "meaningful_scene_start"), "/plot/chapter", errors)
+        chapter_number = chapter.get("number")
+        add_error(errors, isinstance(chapter.get("chapter_id"), str) and bool(re.fullmatch(r"chapter-[0-9]{3,}", chapter.get("chapter_id", ""))), "plot/chapter/chapter_id is invalid")
+        add_error(errors, isinstance(chapter_number, int) and chapter_number >= 1, "plot/chapter/number must be positive")
+        add_error(errors, chapter_number == campaign.get("chapter"), "plot/chapter/number must match campaign/chapter")
+        add_error(errors, chapter.get("title") is None or isinstance(chapter.get("title"), str), "plot/chapter/title is invalid")
+        add_error(errors, enum_value(chapter.get("status"), {"setup", "active"}), "plot/chapter/status is invalid")
+        add_error(errors, chapter.get("core_question") is None or (isinstance(chapter.get("core_question"), str) and bool(chapter.get("core_question", "").strip())), "plot/chapter/core_question is invalid")
+        add_error(errors, chapter.get("pressure_source") is None or (isinstance(chapter.get("pressure_source"), str) and bool(chapter.get("pressure_source", "").strip())), "plot/chapter/pressure_source is invalid")
+        add_error(errors, valid_event_id(chapter.get("opened_at_event_id")), "plot/chapter/opened_at_event_id is invalid")
+        scene_start = chapter.get("meaningful_scene_start")
+        add_error(errors, isinstance(scene_start, int) and 0 <= scene_start <= campaign.get("meaningful_scenes", -1), "plot/chapter/meaningful_scene_start is invalid")
+        if chapter.get("status") == "active" or campaign.get("meaningful_scenes", 0) > 0:
+            add_error(errors, isinstance(chapter.get("core_question"), str) and bool(chapter.get("core_question", "").strip()), "active chapter requires a core question")
+            add_error(errors, isinstance(chapter.get("pressure_source"), str) and bool(chapter.get("pressure_source", "").strip()), "active chapter requires a pressure source")
+        history = plot.get("chapter_history")
+        add_error(errors, isinstance(history, list), "plot/chapter_history must be an array")
+        add_error(errors, unique_named_ids(history, "chapter_id"), "chapter history ids must be unique")
+        if isinstance(history, list):
+            history_numbers: List[int] = []
+            for index, entry in enumerate(history):
+                if not isinstance(entry, dict):
+                    errors.append(f"plot/chapter_history/{index} must be an object")
+                    continue
+                require_fields(entry, ("chapter_id", "number", "title", "core_question", "resolution", "pressure_source", "irreversible_changes", "opened_at_event_id", "closed_at_event_id", "meaningful_scene_end", "updated_domains"), f"/plot/chapter_history/{index}", errors)
+                add_error(errors, isinstance(entry.get("chapter_id"), str) and bool(re.fullmatch(r"chapter-[0-9]{3,}", entry.get("chapter_id", ""))), f"plot/chapter_history/{index}/chapter_id is invalid")
+                number = entry.get("number")
+                add_error(errors, isinstance(number, int) and number >= 1, f"plot/chapter_history/{index}/number is invalid")
+                if isinstance(number, int):
+                    history_numbers.append(number)
+                for field in ("core_question", "resolution", "pressure_source"):
+                    add_error(errors, isinstance(entry.get(field), str) and bool(entry.get(field, "").strip()), f"plot/chapter_history/{index}/{field} is required")
+                add_error(errors, valid_string_list(entry.get("irreversible_changes"), minimum=1), f"plot/chapter_history/{index}/irreversible_changes is required")
+                add_error(errors, valid_event_id(entry.get("opened_at_event_id")), f"plot/chapter_history/{index}/opened_at_event_id is invalid")
+                add_error(errors, valid_event_id(entry.get("closed_at_event_id")), f"plot/chapter_history/{index}/closed_at_event_id is invalid")
+                add_error(errors, isinstance(entry.get("meaningful_scene_end"), int) and entry.get("meaningful_scene_end", 0) >= 1, f"plot/chapter_history/{index}/meaningful_scene_end is invalid")
+                domains = entry.get("updated_domains")
+                add_error(errors, isinstance(domains, list) and bool(domains) and len(domains) == len(set(domains)) and all(item in CHAPTER_DOMAINS for item in domains), f"plot/chapter_history/{index}/updated_domains is invalid")
+            if history_numbers:
+                add_error(errors, history_numbers == list(range(1, len(history_numbers) + 1)), "chapter history numbers must be contiguous from 1")
+                add_error(errors, history_numbers[-1] + 1 == campaign.get("chapter"), "current chapter must follow chapter history")
+
     world = state.get("world")
     add_error(errors, isinstance(world, dict), "world must be an object")
     if isinstance(world, dict):
@@ -497,9 +871,46 @@ def validate_state(state: Any) -> List[str]:
     add_error(errors, isinstance(discipline.get("warnings"), list), "discipline/warnings must be an array")
 
     knowledge = mapping_at(state, "knowledge", errors, "")
-    require_fields(knowledge, ("character_known", "engine_truth", "game_supplements"), "/knowledge", errors)
+    knowledge_fields = ["character_known", "engine_truth", "game_supplements"]
+    if version == "1.7":
+        knowledge_fields.append("canon_records")
+    require_fields(knowledge, knowledge_fields, "/knowledge", errors)
     for field in ("character_known", "engine_truth", "game_supplements"):
         add_error(errors, isinstance(knowledge.get(field), list), f"knowledge/{field} must be an array")
+    if version == "1.7":
+        canon_records = knowledge.get("canon_records")
+        add_error(errors, isinstance(canon_records, list), "knowledge/canon_records must be an array")
+        add_error(errors, unique_named_ids(canon_records, "claim_id"), "canon claim ids must be unique")
+        if isinstance(canon_records, list):
+            for index, record in enumerate(canon_records):
+                if not isinstance(record, dict):
+                    errors.append(f"knowledge/canon_records/{index} must be an object")
+                    continue
+                require_fields(record, ("claim_id", "claim", "canon_status", "confidence", "verification", "sources", "character_access", "recorded_at_event_id", "notes"), f"/knowledge/canon_records/{index}", errors)
+                add_error(errors, valid_named_id(record.get("claim_id"), "claim-"), f"knowledge/canon_records/{index}/claim_id is invalid")
+                add_error(errors, isinstance(record.get("claim"), str) and bool(record.get("claim", "").strip()), f"knowledge/canon_records/{index}/claim is required")
+                canon_status = record.get("canon_status")
+                add_error(errors, enum_value(canon_status, CANON_STATUSES), f"knowledge/canon_records/{index}/canon_status is invalid")
+                add_error(errors, enum_value(record.get("confidence"), {"high", "medium", "low", "none"}), f"knowledge/canon_records/{index}/confidence is invalid")
+                add_error(errors, enum_value(record.get("verification"), {"verified", "unverified", "conflict"}), f"knowledge/canon_records/{index}/verification is invalid")
+                sources = record.get("sources")
+                add_error(errors, isinstance(sources, list), f"knowledge/canon_records/{index}/sources must be an array")
+                if isinstance(sources, list):
+                    for source_index, source in enumerate(sources):
+                        if not isinstance(source, dict):
+                            errors.append(f"knowledge/canon_records/{index}/sources/{source_index} must be an object")
+                            continue
+                        require_fields(source, ("kind", "citation"), f"/knowledge/canon_records/{index}/sources/{source_index}", errors)
+                        add_error(errors, enum_value(source.get("kind"), {"novel", "author_statement", "official_setting", "licensed_adaptation", "secondary", "game_rules"}), f"knowledge/canon_records/{index}/sources/{source_index}/kind is invalid")
+                        add_error(errors, isinstance(source.get("citation"), str) and bool(source.get("citation", "").strip()), f"knowledge/canon_records/{index}/sources/{source_index}/citation is required")
+                add_error(errors, enum_value(record.get("character_access"), {"known", "partial", "unknown"}), f"knowledge/canon_records/{index}/character_access is invalid")
+                add_error(errors, record.get("recorded_at_event_id") is None or valid_event_id(record.get("recorded_at_event_id")), f"knowledge/canon_records/{index}/recorded_at_event_id is invalid")
+                add_error(errors, record.get("notes") is None or isinstance(record.get("notes"), str), f"knowledge/canon_records/{index}/notes is invalid")
+                if canon_status in {"primary_canon", "official_supplement", "licensed_adaptation"}:
+                    add_error(errors, isinstance(sources, list) and bool(sources), f"verified canon claim {record.get('claim_id')} requires a source")
+                    add_error(errors, record.get("verification") == "verified", f"canon claim {record.get('claim_id')} must be verified")
+                if canon_status == "unknown":
+                    add_error(errors, record.get("confidence") == "none", f"unknown canon claim {record.get('claim_id')} must use confidence none")
     add_error(errors, isinstance(state.get("visuals"), dict), "visuals must be an object")
 
     roll_log = state.get("roll_log")
@@ -531,11 +942,65 @@ def validate_state(state: Any) -> List[str]:
     return errors
 
 
+def validate_chapter_transition(value: Any, errors: List[str]) -> None:
+    if not isinstance(value, dict):
+        errors.append("chapter_transition must be an object")
+        return
+    fields = {"closed_chapter_id", "closed_number", "resolution", "irreversible_changes", "updated_domains", "next_chapter"}
+    require_fields(value, fields, "/chapter_transition", errors)
+    add_error(errors, set(value) == fields, "chapter_transition contains unsupported fields")
+    add_error(errors, isinstance(value.get("closed_chapter_id"), str) and bool(re.fullmatch(r"chapter-[0-9]{3,}", value.get("closed_chapter_id", ""))), "chapter_transition/closed_chapter_id is invalid")
+    closed_number = value.get("closed_number")
+    add_error(errors, isinstance(closed_number, int) and closed_number >= 1, "chapter_transition/closed_number is invalid")
+    add_error(errors, isinstance(value.get("resolution"), str) and bool(value.get("resolution", "").strip()), "chapter_transition/resolution is required")
+    add_error(errors, valid_string_list(value.get("irreversible_changes"), minimum=1), "chapter_transition/irreversible_changes is required")
+    domains = value.get("updated_domains")
+    add_error(errors, isinstance(domains, list) and bool(domains) and len(domains) == len(set(domains)) and all(item in CHAPTER_DOMAINS for item in domains), "chapter_transition/updated_domains is invalid")
+    next_chapter = value.get("next_chapter")
+    if not isinstance(next_chapter, dict):
+        errors.append("chapter_transition/next_chapter must be an object")
+        return
+    next_fields = {"chapter_id", "number", "core_question", "pressure_source"}
+    require_fields(next_chapter, next_fields, "/chapter_transition/next_chapter", errors)
+    add_error(errors, set(next_chapter) == next_fields, "chapter_transition/next_chapter contains unsupported fields")
+    add_error(errors, isinstance(next_chapter.get("chapter_id"), str) and bool(re.fullmatch(r"chapter-[0-9]{3,}", next_chapter.get("chapter_id", ""))), "chapter_transition/next_chapter/chapter_id is invalid")
+    add_error(errors, isinstance(next_chapter.get("number"), int) and isinstance(closed_number, int) and next_chapter.get("number") == closed_number + 1, "chapter_transition/next_chapter/number must follow closed_number")
+    for field in ("core_question", "pressure_source"):
+        add_error(errors, isinstance(next_chapter.get(field), str) and bool(next_chapter.get(field, "").strip()), f"chapter_transition/next_chapter/{field} is required")
+
+
+def validate_economy_settlement(value: Any, errors: List[str]) -> None:
+    if not isinstance(value, dict):
+        errors.append("economy_settlement must be an object")
+        return
+    fields = {"period_start", "period_end", "income_pence", "cost_pence", "debt_payment_pence", "net_pence", "resulting_balance_pence", "settled_flow_ids", "settled_debt_ids"}
+    require_fields(value, fields, "/economy_settlement", errors)
+    add_error(errors, set(value) == fields, "economy_settlement contains unsupported fields")
+    start = parse_world_time(value.get("period_start"))
+    end = parse_world_time(value.get("period_end"))
+    add_error(errors, start is not None, "economy_settlement/period_start is invalid")
+    add_error(errors, end is not None, "economy_settlement/period_end is invalid")
+    if start is not None and end is not None:
+        add_error(errors, end >= start, "economy_settlement period moves backward")
+    numeric = all(isinstance(value.get(field), int) and not isinstance(value.get(field), bool) for field in ("income_pence", "cost_pence", "debt_payment_pence", "net_pence", "resulting_balance_pence"))
+    add_error(errors, numeric, "economy_settlement numeric fields are invalid")
+    if numeric:
+        for field in ("income_pence", "cost_pence", "debt_payment_pence", "resulting_balance_pence"):
+            add_error(errors, value[field] >= 0, f"economy_settlement/{field} must be non-negative")
+        expected_net = value["income_pence"] - value["cost_pence"] - value["debt_payment_pence"]
+        add_error(errors, value["net_pence"] == expected_net, "economy_settlement/net_pence does not match income minus costs and debt payments")
+    flow_ids = value.get("settled_flow_ids")
+    debt_ids = value.get("settled_debt_ids")
+    add_error(errors, isinstance(flow_ids, list) and len(flow_ids) == len(set(flow_ids)) and all(valid_named_id(item, "flow-") for item in flow_ids), "economy_settlement/settled_flow_ids is invalid")
+    add_error(errors, isinstance(debt_ids, list) and len(debt_ids) == len(set(debt_ids)) and all(valid_named_id(item, "debt-") for item in debt_ids), "economy_settlement/settled_debt_ids is invalid")
+
+
 def validate_event(event: Any) -> List[str]:
     errors: List[str] = []
     if not isinstance(event, dict):
         return ["event must be an object"]
-    required = (
+    version = event_contract_version(event)
+    required = [
         "event_id",
         "type",
         "previous_state_revision",
@@ -548,11 +1013,18 @@ def validate_event(event: Any) -> List[str]:
         "state_patch",
         "visible_result",
         "created_at",
-    )
+    ]
+    if version == "1.7":
+        required[0:0] = ["schema_version", "ruleset_version"]
     for key in required:
         add_error(errors, key in event, f"event missing key: {key}")
     allowed_event_fields = set(required) | {"transport", "migration"}
+    if version == "1.7":
+        allowed_event_fields |= {"chapter_transition", "economy_settlement"}
     add_error(errors, set(event).issubset(allowed_event_fields), "event contains an unsupported field")
+    add_error(errors, version in WRITABLE_VERSIONS, "event schema_version is unsupported")
+    if version == "1.7":
+        add_error(errors, event.get("ruleset_version") == "1.7", "event ruleset_version must be 1.7")
     event_id = event.get("event_id")
     add_error(errors, valid_event_id(event_id), "event_id is invalid")
     add_error(errors, isinstance(event.get("type"), str) and bool(re.fullmatch(r"[a-z][a-z0-9_]*", event.get("type", ""))), "event type is invalid")
@@ -687,6 +1159,21 @@ def validate_event(event: Any) -> List[str]:
                 add_error(errors, "value" in operation, f"state_patch/{index} replace requires value")
 
     add_error(errors, event.get("transport") is None or isinstance(event.get("transport"), dict), "transport must be an object or null")
+    if version == "1.7":
+        chapter_transition = event.get("chapter_transition")
+        economy_settlement = event.get("economy_settlement")
+        if chapter_transition is not None:
+            validate_chapter_transition(chapter_transition, errors)
+        if economy_settlement is not None:
+            validate_economy_settlement(economy_settlement, errors)
+        if event.get("type") == "chapter_closed":
+            add_error(errors, isinstance(chapter_transition, dict), "chapter_closed event requires chapter_transition")
+        else:
+            add_error(errors, chapter_transition is None, "only chapter_closed may carry chapter_transition")
+        if event.get("type") == "economy_settled":
+            add_error(errors, isinstance(economy_settlement, dict), "economy_settled event requires economy_settlement")
+        else:
+            add_error(errors, economy_settlement is None, "only economy_settled may carry economy_settlement")
     migration = event.get("migration")
     if migration is not None:
         add_error(errors, isinstance(migration, dict), "migration must be an object or null")
@@ -694,8 +1181,8 @@ def validate_event(event: Any) -> List[str]:
             migration_fields = {"from_schema_version", "to_schema_version", "from_ruleset_version", "to_ruleset_version", "notes"}
             require_fields(migration, migration_fields, "/migration", errors)
             add_error(errors, set(migration).issubset(migration_fields), "migration contains an unsupported field")
-            add_error(errors, migration.get("to_schema_version") == "1.6", "migration/to_schema_version must be 1.6")
-            add_error(errors, migration.get("to_ruleset_version") == "1.6", "migration/to_ruleset_version must be 1.6")
+            add_error(errors, migration.get("to_schema_version") == version, f"migration/to_schema_version must be {version}")
+            add_error(errors, migration.get("to_ruleset_version") == version, f"migration/to_ruleset_version must be {version}")
             for field in ("from_schema_version", "from_ruleset_version", "notes"):
                 add_error(errors, isinstance(migration.get(field), str) and bool(migration.get(field, "").strip()), f"migration/{field} is required")
     if event.get("type") == "ruleset_migrated":
@@ -721,15 +1208,29 @@ def parse_world_time(value: Any) -> Optional[dt.datetime]:
     return None
 
 
-def validate_event_sequence(events: List[Dict[str, Any]]) -> List[str]:
+def validate_event_sequence(events: List[Dict[str, Any]], expected_version: Optional[str] = None) -> List[str]:
+    if expected_version in LEGACY_READ_ONLY_VERSIONS:
+        return validate_legacy_event_sequence(events)
     errors: List[str] = []
     seen_ids = set()
     previous_number: Optional[int] = None
     previous_revision: Optional[int] = None
     previous_world_time: Optional[dt.datetime] = None
     previous_created_at: Optional[dt.datetime] = None
+    seen_v17 = False
     for index, event in enumerate(events):
         errors.extend(f"events/{index}: {message}" for message in validate_event(event))
+        version = event_contract_version(event)
+        if expected_version == "1.6":
+            add_error(errors, version == "1.6", f"v1.6 campaign contains a {version} event")
+        elif expected_version == "1.7":
+            if version == "1.7" and not seen_v17 and index > 0:
+                migration = event.get("migration")
+                add_error(errors, event.get("type") == "ruleset_migrated" and isinstance(migration, dict) and migration.get("from_schema_version") == "1.6", "first v1.7 event after legacy history must be a migration from 1.6")
+            if seen_v17:
+                add_error(errors, version == "1.7", "legacy event appears after v1.7 history began")
+            if version == "1.7":
+                seen_v17 = True
         event_id = event.get("event_id")
         if isinstance(event_id, str):
             add_error(errors, event_id not in seen_ids, f"duplicate event id: {event_id}")
@@ -754,12 +1255,17 @@ def validate_event_sequence(events: List[Dict[str, Any]]) -> List[str]:
             add_error(errors, created_at >= previous_created_at, f"real timestamp moved backward at {event_id}")
         if created_at is not None:
             previous_created_at = created_at
+    if expected_version == "1.7" and events:
+        add_error(errors, event_contract_version(events[-1]) == "1.7", "v1.7 campaign final event must use the v1.7 contract")
     return errors
 
 
 def validate_consistency(state: Dict[str, Any], events: List[Dict[str, Any]], require_full_log: bool = True) -> List[str]:
+    version = state_contract_version(state)
+    if version in LEGACY_READ_ONLY_VERSIONS:
+        return validate_legacy_consistency(state, events, version)
     errors = validate_state(state)
-    errors.extend(validate_event_sequence(events))
+    errors.extend(validate_event_sequence(events, expected_version=version))
     runtime = state.get("runtime", {})
     if events:
         last = events[-1]
@@ -842,6 +1348,137 @@ def validate_consistency(state: Dict[str, Any], events: List[Dict[str, Any]], re
     ]
     if all(isinstance(item, str) for item in platform_ids):
         add_error(errors, len(platform_ids) == len(set(platform_ids)), "platform RNG result ids must be unique")
+    if version == "1.7":
+        event_by_id = {event.get("event_id"): event for event in events}
+        preferences = state.get("preferences", {})
+        if isinstance(preferences, dict):
+            preference_event = preferences.get("updated_at_event_id")
+            add_error(errors, preference_event in event_ids, f"preferences reference unknown event {preference_event}")
+
+        commitments = state.get("commitments", [])
+        commitment_by_id = {
+            item.get("commitment_id"): item
+            for item in commitments
+            if isinstance(item, dict) and isinstance(item.get("commitment_id"), str)
+        }
+        organization_ids = set()
+        social = state.get("social", {})
+        if isinstance(social, dict):
+            for status in social.get("statuses", []):
+                if not isinstance(status, dict):
+                    continue
+                for evidence_id in status.get("evidence_event_ids", []):
+                    add_error(errors, evidence_id in event_ids, f"social status {status.get('status_id')} references unknown event {evidence_id}")
+            for organization in social.get("organizations", []):
+                if not isinstance(organization, dict):
+                    continue
+                organization_id = organization.get("organization_id")
+                organization_ids.add(organization_id)
+                for evidence_id in organization.get("evidence_event_ids", []):
+                    add_error(errors, evidence_id in event_ids, f"organization {organization_id} references unknown event {evidence_id}")
+                add_error(errors, organization.get("last_changed_event_id") in event_ids, f"organization {organization_id} has unknown last_changed_event_id")
+                for commitment_id in organization.get("commitment_ids", []):
+                    add_error(errors, commitment_id in commitment_by_id, f"organization {organization_id} references unknown commitment {commitment_id}")
+        for commitment_id, commitment in commitment_by_id.items():
+            for evidence_id in commitment.get("evidence_event_ids", []):
+                add_error(errors, evidence_id in event_ids, f"commitment {commitment_id} references unknown event {evidence_id}")
+            linked_organization = commitment.get("linked_organization_id")
+            if linked_organization is not None:
+                add_error(errors, linked_organization in organization_ids, f"commitment {commitment_id} references unknown organization {linked_organization}")
+            breach_event = commitment.get("breach_event_id")
+            if breach_event is not None:
+                add_error(errors, breach_event in event_ids, f"commitment {commitment_id} references unknown breach event {breach_event}")
+
+        economy = state.get("economy", {})
+        flow_ids = set()
+        debt_ids = set()
+        if isinstance(economy, dict):
+            for collection_name in ("income_streams", "recurring_costs"):
+                for flow in economy.get(collection_name, []):
+                    if not isinstance(flow, dict):
+                        continue
+                    flow_ids.add(flow.get("flow_id"))
+                    add_error(errors, flow.get("evidence_event_id") in event_ids, f"economy flow {flow.get('flow_id')} references unknown event")
+            for debt in economy.get("debts", []):
+                if not isinstance(debt, dict):
+                    continue
+                debt_id = debt.get("debt_id")
+                debt_ids.add(debt_id)
+                for evidence_id in debt.get("evidence_event_ids", []):
+                    add_error(errors, evidence_id in event_ids, f"debt {debt_id} references unknown event {evidence_id}")
+                linked_commitment = debt.get("commitment_id")
+                if linked_commitment is not None:
+                    add_error(errors, linked_commitment in commitment_by_id, f"debt {debt_id} references unknown commitment {linked_commitment}")
+            for scarcity in economy.get("scarcity", []):
+                if isinstance(scarcity, dict):
+                    add_error(errors, scarcity.get("evidence_event_id") in event_ids, f"scarcity {scarcity.get('category')} references unknown event")
+            settlement_event_id = economy.get("last_settlement_event_id")
+            if settlement_event_id is not None:
+                settlement_event = event_by_id.get(settlement_event_id)
+                add_error(errors, isinstance(settlement_event, dict) and settlement_event.get("type") == "economy_settled", "economy/last_settlement_event_id must reference an economy_settled event")
+        settlement_events: List[Dict[str, Any]] = []
+        for event in events:
+            settlement = event.get("economy_settlement")
+            if not isinstance(settlement, dict):
+                continue
+            settlement_events.append(event)
+            add_error(errors, all(item in flow_ids for item in settlement.get("settled_flow_ids", [])), f"economy settlement {event.get('event_id')} references an unknown flow")
+            add_error(errors, all(item in debt_ids for item in settlement.get("settled_debt_ids", [])), f"economy settlement {event.get('event_id')} references an unknown debt")
+            if isinstance(economy, dict) and economy.get("last_settlement_event_id") == event.get("event_id") and event is events[-1]:
+                balance = money_to_pence(state.get("player", {}).get("money"))
+                add_error(errors, settlement.get("resulting_balance_pence") == balance, "latest economy settlement balance does not match player money")
+        if isinstance(economy, dict) and settlement_events:
+            add_error(
+                errors,
+                economy.get("last_settlement_event_id") == settlement_events[-1].get("event_id"),
+                "economy/last_settlement_event_id must reference the newest economy settlement",
+            )
+
+        chapter = plot.get("chapter", {}) if isinstance(plot, dict) else {}
+        if isinstance(chapter, dict):
+            add_error(errors, chapter.get("opened_at_event_id") in event_ids, f"current chapter references unknown opening event {chapter.get('opened_at_event_id')}")
+        raw_chapter_history = plot.get("chapter_history", []) if isinstance(plot, dict) else []
+        chapter_history = raw_chapter_history if isinstance(raw_chapter_history, list) else []
+        history_by_close = {
+            entry.get("closed_at_event_id"): entry
+            for entry in chapter_history
+            if isinstance(entry, dict)
+        }
+        for entry in chapter_history:
+            if not isinstance(entry, dict):
+                continue
+            opened_id = entry.get("opened_at_event_id")
+            closed_id = entry.get("closed_at_event_id")
+            add_error(errors, opened_id in event_ids, f"chapter {entry.get('chapter_id')} references unknown opening event {opened_id}")
+            closing_event = event_by_id.get(closed_id)
+            add_error(errors, isinstance(closing_event, dict) and closing_event.get("type") == "chapter_closed", f"chapter {entry.get('chapter_id')} has invalid closing event {closed_id}")
+            if isinstance(closing_event, dict):
+                transition = closing_event.get("chapter_transition")
+                if isinstance(transition, dict):
+                    add_error(errors, transition.get("closed_chapter_id") == entry.get("chapter_id"), f"chapter transition id differs for {closed_id}")
+                    add_error(errors, transition.get("closed_number") == entry.get("number"), f"chapter transition number differs for {closed_id}")
+                    add_error(errors, transition.get("resolution") == entry.get("resolution"), f"chapter transition resolution differs for {closed_id}")
+                    add_error(errors, transition.get("irreversible_changes") == entry.get("irreversible_changes"), f"chapter transition irreversible changes differ for {closed_id}")
+                    add_error(errors, transition.get("updated_domains") == entry.get("updated_domains"), f"chapter transition updated domains differ for {closed_id}")
+        for event in events:
+            if event.get("type") == "chapter_closed":
+                add_error(errors, event.get("event_id") in history_by_close, f"chapter close {event.get('event_id')} is missing from chapter_history")
+        if events and events[-1].get("type") == "chapter_closed" and isinstance(chapter, dict):
+            transition = events[-1].get("chapter_transition")
+            next_chapter = transition.get("next_chapter") if isinstance(transition, dict) else None
+            if isinstance(next_chapter, dict):
+                for field in ("chapter_id", "number", "core_question", "pressure_source"):
+                    add_error(errors, chapter.get(field) == next_chapter.get(field), f"current chapter {field} differs from latest chapter transition")
+                add_error(errors, chapter.get("opened_at_event_id") == events[-1].get("event_id"), "current chapter must open at the latest chapter_closed event")
+
+        knowledge = state.get("knowledge", {})
+        if isinstance(knowledge, dict):
+            for claim in knowledge.get("canon_records", []):
+                if not isinstance(claim, dict):
+                    continue
+                recorded_id = claim.get("recorded_at_event_id")
+                if recorded_id is not None:
+                    add_error(errors, recorded_id in event_ids, f"canon claim {claim.get('claim_id')} references unknown event {recorded_id}")
     return errors
 
 
@@ -967,6 +1604,7 @@ def raise_if_errors(errors: List[str]) -> None:
 
 def recover_locked(campaign_dir: Path) -> Dict[str, Any]:
     state, events = state_and_events(campaign_dir)
+    require_writable_version(state_contract_version(state), "recovery")
     raise_if_errors(validate_state(state))
     current_revision = state["runtime"]["state_revision"]
     pending = [event for event in events if event.get("state_revision", -1) > current_revision]
@@ -994,9 +1632,10 @@ def commit_event(campaign_dir: Path, event_path: Path) -> Dict[str, Any]:
     event = load_data(event_path)
     if not isinstance(event, dict):
         raise RuntimeErrorDetail("event file must contain an object")
-    raise_if_errors(validate_event(event))
     with campaign_lock(campaign_dir):
         state, events = state_and_events(campaign_dir)
+        require_writable_version(state_contract_version(state), "commit")
+        raise_if_errors(validate_event(event))
         if events and events[-1].get("state_revision", -1) > state.get("runtime", {}).get("state_revision", -1):
             recover_locked(campaign_dir)
             state, events = state_and_events(campaign_dir)
@@ -1035,6 +1674,7 @@ def initialize_campaign(campaigns_dir: Path, campaign_id: str, state_path: Path,
     event = load_data(event_path)
     if not isinstance(state, dict) or not isinstance(event, dict):
         raise RuntimeErrorDetail("initial state and event must be objects")
+    require_writable_version(state_contract_version(state), "initialization")
     raise_if_errors(validate_state(state))
     raise_if_errors(validate_event(event))
     add_errors: List[str] = []
@@ -1072,23 +1712,38 @@ def initialize_campaign(campaigns_dir: Path, campaign_id: str, state_path: Path,
     return {"status": "initialized", "campaign_id": campaign_id, "campaign_dir": str(campaign_dir), "activated": activate}
 
 
-def export_anchor(campaign_dir: Path, output: Path, recent_events: int) -> Dict[str, Any]:
-    state, events = state_and_events(campaign_dir)
+def build_anchor(
+    state: Dict[str, Any],
+    events: List[Dict[str, Any]],
+    recent_events: int,
+    exported_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    require_writable_version(state_contract_version(state), "portable anchor export")
     raise_if_errors(validate_consistency(state, events))
     if recent_events < 1:
         raise RuntimeErrorDetail("recent-events must be positive")
+    timestamp = exported_at or dt.datetime.now(dt.timezone.utc).isoformat()
+    if parse_real_timestamp(timestamp) is None:
+        raise RuntimeErrorDetail("exported_at must be an ISO-8601 timestamp with timezone")
+    ruleset_version = state["runtime"]["ruleset_version"]
     payload: Dict[str, Any] = {
-        "format_version": "1.0",
+        "format_version": "1.1" if ruleset_version == "1.7" else "1.0",
         "campaign_id": state["campaign"]["id"],
         "state_revision": state["runtime"]["state_revision"],
         "last_event_id": state["runtime"]["last_event_id"],
-        "ruleset_version": state["runtime"]["ruleset_version"],
-        "exported_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "ruleset_version": ruleset_version,
+        "exported_at": timestamp,
         "contains_hidden_state": True,
         "authoritative_state": state,
         "recent_events": events[-recent_events:],
     }
     payload["integrity"] = {"algorithm": "sha256-canonical-json", "digest": canonical_digest(payload)}
+    return payload
+
+
+def export_anchor(campaign_dir: Path, output: Path, recent_events: int) -> Dict[str, Any]:
+    state, events = state_and_events(campaign_dir)
+    payload = build_anchor(state, events, recent_events)
     atomic_write(output, payload)
     return {"status": "exported", "output": str(output), "digest": payload["integrity"]["digest"]}
 
@@ -1110,15 +1765,18 @@ def verify_anchor(path: Path) -> Dict[str, Any]:
     events = anchor.get("recent_events")
     if not isinstance(state, dict) or not isinstance(events, list):
         raise RuntimeErrorDetail("anchor state or event list is invalid")
+    require_writable_version(state_contract_version(state), "portable anchor verification")
     raise_if_errors(validate_state(state))
-    raise_if_errors(validate_event_sequence(events))
+    version = state_contract_version(state)
+    raise_if_errors(validate_event_sequence(events, expected_version=version))
     anchor_errors: List[str] = []
-    add_error(anchor_errors, anchor.get("format_version") == "1.0", "anchor format_version must be 1.0")
+    expected_format = "1.1" if version == "1.7" else "1.0"
+    add_error(anchor_errors, anchor.get("format_version") == expected_format, f"anchor format_version must be {expected_format}")
     add_error(anchor_errors, anchor.get("contains_hidden_state") is True, "anchor must declare contains_hidden_state")
     add_error(anchor_errors, anchor.get("campaign_id") == state.get("campaign", {}).get("id"), "anchor campaign_id does not match state")
     add_error(anchor_errors, anchor.get("state_revision") == state.get("runtime", {}).get("state_revision"), "anchor state_revision does not match state")
     add_error(anchor_errors, anchor.get("last_event_id") == state.get("runtime", {}).get("last_event_id"), "anchor last_event_id does not match state")
-    add_error(anchor_errors, anchor.get("ruleset_version") == state.get("runtime", {}).get("ruleset_version") == "1.6", "anchor ruleset_version does not match state")
+    add_error(anchor_errors, anchor.get("ruleset_version") == state.get("runtime", {}).get("ruleset_version") == version, "anchor ruleset_version does not match state")
     add_error(anchor_errors, parse_real_timestamp(anchor.get("exported_at")) is not None, "anchor exported_at must be an ISO-8601 timestamp with timezone")
     raise_if_errors(anchor_errors)
     if events:
@@ -1166,8 +1824,10 @@ def main() -> int:
         if args.command == "validate":
             state, events = state_and_events(args.campaign_dir)
             raise_if_errors(validate_consistency(state, events))
+            version = state_contract_version(state)
             output = {
-                "status": "valid",
+                "status": "valid_legacy_read_only" if version in LEGACY_READ_ONLY_VERSIONS else "valid",
+                "contract_version": version,
                 "campaign_id": state["campaign"]["id"],
                 "state_revision": state["runtime"]["state_revision"],
                 "last_event_id": state["runtime"]["last_event_id"],

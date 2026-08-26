@@ -1,0 +1,54 @@
+{
+  "ruleset_version": "1.7",
+  "legacy_body_sha256": "3cce67faa551a1578fc52851d612b85b60b1028eb08c29d0e915a5a22b34efc5",
+  "legacy_source": {
+    "repository": "https://github.com/zyfayes/lotm-text-game-skill",
+    "commit": "10ed5c97ea176151b2bbf8d419b80ab76c42b89d",
+    "path": "references/ruleset.md",
+    "body_starts_at_line": 11
+  },
+  "legacy_schema_sha256": {
+    "campaign-state.v1.6.schema.json": "cc00c39209671838b16326c429aec2b27cb41a039ea292226d6e00813fc0e3ef",
+    "campaign-event.v1.6.schema.json": "15b0d449a7d6f15aeef9c2b06f3f70e0b9977db1b59dedd4983386f705e66b53",
+    "portable-anchor.v1.6.schema.json": "1444f4afa53e73be90d1a497dabf3b447842fed5559bd30b8eb6c74090e01aec"
+  },
+  "modules": [
+    "core-rules.md",
+    "canon-and-world.md",
+    "pathways-and-powers.md",
+    "adjudication-and-systems.md",
+    "causality-and-continuity.md",
+    "presentation.md",
+    "appendices.md"
+  ],
+  "always_read_for_adjudication": [
+    "core-rules.md",
+    "adjudication-and-systems.md",
+    "causality-and-continuity.md"
+  ],
+  "legacy_sections": [
+    {"id": "volume-1", "module": "core-rules.md", "heading": "【卷壹 · 星界律典】运行总纲与不可违铁则"},
+    {"id": "volume-2", "module": "core-rules.md", "heading": "【卷贰 · 混沌三途】难度体系"},
+    {"id": "volume-3", "module": "core-rules.md", "heading": "【卷叁 · 命运之门】角色创建流程（严格顺序，不可跳步）"},
+    {"id": "volume-4", "module": "canon-and-world.md", "heading": "【卷肆 · 世界之书】世界观设定（AI 必须长期记忆）"},
+    {"id": "volume-5", "module": "pathways-and-powers.md", "heading": "【卷伍 · 途径法典】力量体系（核心设定，不可精简）"},
+    {"id": "volume-6", "module": "adjudication-and-systems.md", "heading": "【卷陆 · 天平之秤】系统与判定"},
+    {"id": "volume-7", "module": "causality-and-continuity.md", "heading": "【卷柒 · 因果之网】蝴蝶效应与原著铁则"},
+    {"id": "volume-8", "module": "causality-and-continuity.md", "heading": "【卷捌 · 记忆之锚】防遗忘与总结协议"},
+    {"id": "volume-9", "module": "presentation.md", "heading": "【卷玖 · 灵视之镜】跨平台视觉与面板系统"},
+    {"id": "volume-10", "module": "core-rules.md", "heading": "【卷拾 · 启程之刻】开局流程与 AI 运行手册"},
+    {"id": "appendix-index", "module": "appendices.md", "heading": "【附录 · 雾中索引】速查"},
+    {"id": "appendix-canon", "module": "appendices.md", "heading": "【附录 · 正典校准说明】"},
+    {"id": "appendix-v1.4", "module": "appendices.md", "heading": "【附录 · v1.4 修订说明】"},
+    {"id": "appendix-v1.5", "module": "appendices.md", "heading": "【附录 · v1.5 修订说明】"},
+    {"id": "appendix-v1.6", "module": "appendices.md", "heading": "【附录 · v1.6 修订说明】"},
+    {"id": "appendix-v1.7", "module": "appendices.md", "heading": "【附录 · v1.7 修订说明】"}
+  ],
+  "authorities": {
+    "character_creation_turns_endings": "core-rules.md",
+    "checks_risks_economy_social_chapters": "adjudication-and-systems.md",
+    "canon_sources_unknowns_supplements": "canon-and-world.md",
+    "state_events_recovery_migration": "causality-and-continuity.md",
+    "public_panels_rendering_fallbacks": "presentation.md"
+  }
+}

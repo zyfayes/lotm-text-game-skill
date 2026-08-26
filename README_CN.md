@@ -15,6 +15,8 @@
 | 自由行动 | 推荐选项不会把玩家锁进菜单，任何合理的世界内行为都可以尝试。 |
 | 持续运转的世界 | 势力、威胁和重大事件会继续发展，不会停下来等待玩家。 |
 | 真实后果 | 金钱、伤势、怀疑、关系、污染与错过的时机都会持续保留。 |
+| 有边界的社会权力 | 个人好感、社会地位、组织职位、明确权限、声望与通缉热度分别记录；朋友的信赖不会自动变成组织授权。 |
+| 承诺与生计 | 人情、承诺、契约、誓言、把柄、工资、生活成本、疗养、稀缺和财务债务都会延续，同时避免逐餐记账。 |
 | 公平风险与失败 | 不可逆判定先说明角色可预见的风险；失败会改变局势，并留下新的行动方向。 |
 | 可解的谜题 | 必需结论保留独立线索路径，证据记录来源、可信度和验证状态。 |
 | 序列成长 | 魔药、扮演、灵性、仪式、材料与失控风险构成完整的晋升循环。 |
@@ -22,6 +24,8 @@
 | 不可读档重掷 | 骰点与后果只结算一次；故障恢复只修复中断写入，不会重掷历史。 |
 | 可审计随机 | 判定使用系统安全随机源、已承诺的 HMAC 随机流或平台可验证随机源，并记录原始骰、上下文、计数器或平台凭证，以及最终裁决。 |
 | 三种难度 | 可以体验命运眷顾、平凡求生，或者充满恶意的地狱旅程。 |
+| 有推进力的章节 | 每章都有核心问题和压力源，只有产生不可逆变化后才能关闭。 |
+| 可调内容强度 | 恐怖、血腥、恋爱、原著剧透与硬性避雷项采用安全默认值，并可随时调整。 |
 | 可选沉浸插图 | 在核心信息输出完成并取得玩家同意后，可为关键人物、道具和场景生成插图。 |
 
 ## 胜负与游戏长度
@@ -46,6 +50,8 @@
 
 这些数字是公开的体验预期，不是强制回合上限。有意义场景必须包含真实选择、发现、后果、关系变化或世界推进；如果连续两个场景都没有产生这些内容，Agent 必须压缩过场或进入下一个有效节点。玩家可以随时切换节奏，不会改变难度或推进世界时间。
 
+一章通常包含四至八个有意义场景，场景数只作节奏参考。真正的章节契约是一项玩家能理解的核心问题、一个持续压力源和至少一项不可逆变化。章节关闭时会复核命运志向、关系、线索、世界时钟、组织、经济和承诺，只更新实际发生变化的领域。
+
 ## 核心架构
 
 游戏事实与表现层完全分离。HTML 渲染失败、Telegram 重试或图片生成超时，都不能改变骰点、推进时间或重写战役状态。
@@ -54,28 +60,33 @@
 flowchart TD
     U[玩家] --> T[本地 Agent 或 IM 适配器]
     T --> A[运行 SKILL.md 的 Agent]
-    A --> R[规则与行动裁决]
-    R --> D{需要判定？}
+    A --> R[按任务加载的规则模块]
+    R --> C[行动裁决与连续性]
+    C --> D{需要判定？}
     D -->|是| G[可审计 d100 随机源]
     D -->|否| E[追加唯一且不可变的事件]
     G --> E
     E --> S[提交权威状态]
     S --> J[编年史与可移植记忆锚]
     S --> P[公开面板模型]
+    S --> O[按平台能力生成投递计划]
     P --> H[HTML 或 SVG 渲染器]
     H --> I[PNG / JPEG / WebP]
     P --> F[富文本或纯文字降级]
+    O --> F
 ```
 
 | 层级 | 职责 | 主要文件 |
 |---|---|---|
 | Agent 契约 | 加载正确规则并保证回合事务顺序 | `SKILL.md` |
-| 游戏语义 | 世界、角色创建、风险预告、线索闭环、判定、成长、因果与结局 | `references/ruleset.md` |
+| 游戏语义 | 一个权威索引，以及完整拆分的核心、正典、途径、裁决、因果、呈现和附录模块 | `references/ruleset.md` 及其链接的七个模块 |
 | 持久化 | 战役隔离、只追加事件、原子状态、并发与恢复 | `references/runtime-and-storage.md` |
 | 传输层 | Telegram 与通用 IM 投递、去重、按钮和 outbox | `references/transport-adapters.md` |
 | 表现层 | 公开信息边界、移动端状态卡、语义色与插图授权 | `references/visual-media.md` |
 | 确定性 UI | 校验公开模型并生成自包含 HTML 或 SVG | `scripts/render_panel.py` |
 | 运行时完整性 | 生成可审计判定，并校验、提交或恢复状态补丁 | `scripts/roll_check.py`、`scripts/campaign_runtime.py` |
+| 传输完整性 | 按平台能力调整同一个已提交回合，不重新裁决 | `scripts/transport_contract.py` |
+| 可移植性检查 | 检测规则卷缺失、权威漂移、Markdown 删除线风险、原始 HTML 与移动端过宽表格 | `scripts/check_rules.py`、`scripts/check_markdown.py` |
 
 ## 安装
 
@@ -106,7 +117,11 @@ git clone https://github.com/zyfayes/lotm-text-game-skill.git \
 
 角色默认以普通人开局。平衡校验通过的自定义角色最高可以从序列 9 开始，但必须承担真实代价。
 
-新战役使用 v1.6 状态和事件契约。安装新版 Skill 不会自动改写旧战役；迁移需要玩家明确提出，并追加迁移事件。
+新战役使用 v1.7 状态和事件契约。引擎会直接写入默认内容设置：标准恐怖、克制血腥、恋爱内容先征求同意、只按角色知识处理原著剧透，以及尚未填写硬性避雷项；不会为此增加冗长的开局问卷，玩家可以随时修改。
+
+正式规则只支持一名主角和一名权威控制者。群聊可以共同围观，但其他成员属于观众；多人投票、轮流控制、玩家对抗、并发秘密与多角色队伍不属于 v1.7。
+
+原始 v1.6 Schema 作为兼容资源原样保留。安装 v1.7 不会自动改写 v1.6 战役；迁移需要玩家明确提出，并追加迁移事件。更早的 v1.2 至 v1.5 账本可以在只读模式下识别版本并校验事件连续性，在明确迁移前仍会拒绝写入、恢复和记忆锚导出。
 
 ## 战役持久化
 
@@ -125,7 +140,7 @@ campaigns/
 
 `state.yaml` 保存最新权威状态，`events.jsonl` 是只追加的完整审计记录。编年史只记录角色亲历或已经确认的事实；隐藏世界状态与角色知识严格分离。
 
-v1.6 运行时会记录目标证据、线索与调查、公开风险、随机来源、后果及带旧值校验的状态补丁。本地 Agent 可以运行：
+v1.7 运行时继续记录目标证据、线索与调查、公开风险、随机来源、后果及带旧值校验的状态补丁，同时校验组织权限、社会地位、承诺、财务循环、章节切换、内容偏好与正典来源置信度。本地 Agent 可以运行：
 
 ```bash
 python3 scripts/campaign_runtime.py validate --campaign-dir campaigns/<campaign_id>
@@ -141,6 +156,23 @@ python3 scripts/roll_check.py roll --mode ordinary --target 100 --attribute 45 -
 ```
 
 服务端部署可以把这些记录映射到 SQLite、PostgreSQL 或对象存储，但必须保留版本校验、幂等、事务顺序和故障恢复语义。
+
+## 跨平台行为
+
+游戏会先提交事件，再处理表现层。同一个状态修订可以按照 Telegram 或其他 IM 平台的能力确定性降级。
+
+| 平台限制 | 确定性行为 |
+|---|---|
+| 没有可写文件系统 | 在内存中构建带摘要校验的可移植记忆锚，标记持久化降级，并禁止把隐藏状态发到群聊。 |
+| 不能发送图片 | 用同一修订的必需文字摘要替代状态卡。 |
+| 没有按钮 | 发送编号完整的文字选项，同时保留自由行动提示。 |
+| 消息长度很短 | 按语义边界拆分；无法保持编号与全文完整的选项会被拒绝发送。 |
+| 不支持编辑消息 | 另发一条明确的纠错消息。 |
+| webhook 或回调重复 | 返回该入口标识对应的既有结果，不再次调用游戏引擎。 |
+| 媒体发送超时 | 保持待确认或可重试；事件、骰点、状态修订和世界时间不变。 |
+| 多个聊天或话题 | 先解析完整范围键和控制者，再加载当前战役。 |
+
+传输规划器只使用 Python 标准库；宿主提供内存对象时，它不需要读写文件。
 
 ## 渲染状态面板
 
@@ -179,22 +211,40 @@ python3 scripts/render_panel.py \
 │   ├── campaign-state.schema.json
 │   ├── campaign-event.schema.json
 │   ├── portable-anchor.schema.json
+│   ├── campaign-state.v1.6.schema.json
+│   ├── campaign-event.v1.6.schema.json
+│   ├── portable-anchor.v1.6.schema.json
 │   ├── ruleset.md
+│   ├── rules-manifest.json
+│   ├── core-rules.md
+│   ├── canon-and-world.md
+│   ├── pathways-and-powers.md
+│   ├── adjudication-and-systems.md
+│   ├── causality-and-continuity.md
+│   ├── presentation.md
+│   ├── appendices.md
 │   ├── runtime-and-storage.md
 │   ├── transport-adapters.md
 │   └── visual-media.md
 ├── scripts/
 │   ├── campaign_runtime.py
+│   ├── transport_contract.py
+│   ├── check_rules.py
+│   ├── check_markdown.py
 │   ├── roll_check.py
 │   └── render_panel.py
 └── tests/
-    └── test_p0_runtime.py
+    ├── test_p0_runtime.py
+    ├── test_p1_runtime.py
+    └── test_transport_contract.py
 ```
 
 运行标准库回归测试：
 
 ```bash
 python3 -m unittest discover -s tests -v
+python3 scripts/check_rules.py
+python3 scripts/check_markdown.py README.md README_CN.md SKILL.md references
 ```
 
 ## 安全与隐私

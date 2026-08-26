@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/lotm-text-game/campaign-state.schema.json",
-  "title": "LOTM text game campaign state v1.7",
+  "title": "LOTM text game campaign state v1.6",
   "$defs": {
     "eventId": {
       "type": ["string", "null"],
@@ -134,184 +134,20 @@
         }
       ],
       "additionalProperties": true
-    },
-    "evidenceIds": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^evt-[0-9]{6,}$"}
-    },
-    "organizationStanding": {
-      "type": "object",
-      "required": ["organization_id", "name", "membership_status", "rank", "title", "reputation", "heat", "permissions", "commitment_ids", "evidence_event_ids", "last_changed_event_id"],
-      "properties": {
-        "organization_id": {"type": "string", "pattern": "^org-[A-Za-z0-9._-]+$"},
-        "name": {"type": "string", "minLength": 1, "maxLength": 120},
-        "membership_status": {"enum": ["outsider", "candidate", "member", "suspended", "expelled", "hostile"]},
-        "rank": {"type": ["integer", "null"], "minimum": 0},
-        "title": {"type": ["string", "null"], "maxLength": 120},
-        "reputation": {"type": "integer", "minimum": -100, "maximum": 100},
-        "heat": {"type": "integer", "minimum": 0, "maximum": 100},
-        "permissions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 120}},
-        "commitment_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^commitment-[A-Za-z0-9._-]+$"}},
-        "evidence_event_ids": {"$ref": "#/$defs/evidenceIds"},
-        "last_changed_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"}
-      },
-      "additionalProperties": false
-    },
-    "socialStatus": {
-      "type": "object",
-      "required": ["status_id", "context", "label", "standing", "evidence_event_ids"],
-      "properties": {
-        "status_id": {"type": "string", "pattern": "^status-[A-Za-z0-9._-]+$"},
-        "context": {"type": "string", "minLength": 1, "maxLength": 120},
-        "label": {"type": "string", "minLength": 1, "maxLength": 120},
-        "standing": {"type": "integer", "minimum": -100, "maximum": 100},
-        "evidence_event_ids": {"$ref": "#/$defs/evidenceIds"}
-      },
-      "additionalProperties": false
-    },
-    "cashFlow": {
-      "type": "object",
-      "required": ["flow_id", "name", "amount_pence", "cadence", "next_due_at", "status", "evidence_event_id"],
-      "properties": {
-        "flow_id": {"type": "string", "pattern": "^flow-[A-Za-z0-9._-]+$"},
-        "name": {"type": "string", "minLength": 1, "maxLength": 160},
-        "amount_pence": {"type": "integer", "minimum": 0},
-        "cadence": {"enum": ["one_time", "world_turn", "weekly", "monthly"]},
-        "next_due_at": {"type": ["string", "null"], "maxLength": 80},
-        "status": {"enum": ["active", "paused", "ended"]},
-        "evidence_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"}
-      },
-      "additionalProperties": false
-    },
-    "financialDebt": {
-      "type": "object",
-      "required": ["debt_id", "creditor", "principal_pence", "due_at", "status", "commitment_id", "evidence_event_ids"],
-      "properties": {
-        "debt_id": {"type": "string", "pattern": "^debt-[A-Za-z0-9._-]+$"},
-        "creditor": {"type": "string", "minLength": 1, "maxLength": 160},
-        "principal_pence": {"type": "integer", "minimum": 0},
-        "due_at": {"type": ["string", "null"], "maxLength": 80},
-        "status": {"enum": ["current", "overdue", "settled", "defaulted", "forgiven"]},
-        "commitment_id": {"type": ["string", "null"], "pattern": "^commitment-[A-Za-z0-9._-]+$"},
-        "evidence_event_ids": {"$ref": "#/$defs/evidenceIds"}
-      },
-      "additionalProperties": false
-    },
-    "scarcity": {
-      "type": "object",
-      "required": ["category", "level", "reason", "evidence_event_id"],
-      "properties": {
-        "category": {"type": "string", "minLength": 1, "maxLength": 100},
-        "level": {"enum": ["normal", "tight", "scarce", "unavailable"]},
-        "reason": {"type": "string", "minLength": 1, "maxLength": 240},
-        "evidence_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"}
-      },
-      "additionalProperties": false
-    },
-    "commitment": {
-      "type": "object",
-      "required": ["commitment_id", "kind", "summary", "parties", "owed_by", "owed_to", "terms", "status", "due_at", "linked_organization_id", "evidence_event_ids", "breach_event_id"],
-      "properties": {
-        "commitment_id": {"type": "string", "pattern": "^commitment-[A-Za-z0-9._-]+$"},
-        "kind": {"enum": ["favor", "contract", "oath", "promise", "leverage"]},
-        "summary": {"type": "string", "minLength": 1, "maxLength": 300},
-        "parties": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 120}},
-        "owed_by": {"type": "string", "minLength": 1, "maxLength": 120},
-        "owed_to": {"type": "string", "minLength": 1, "maxLength": 120},
-        "terms": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 240}},
-        "status": {"enum": ["open", "fulfilled", "breached", "released", "expired"]},
-        "due_at": {"type": ["string", "null"], "maxLength": 80},
-        "linked_organization_id": {"type": ["string", "null"], "pattern": "^org-[A-Za-z0-9._-]+$"},
-        "evidence_event_ids": {"$ref": "#/$defs/evidenceIds"},
-        "breach_event_id": {"$ref": "#/$defs/eventId"}
-      },
-      "additionalProperties": false
-    },
-    "chapter": {
-      "type": "object",
-      "required": ["chapter_id", "number", "title", "status", "core_question", "pressure_source", "opened_at_event_id", "meaningful_scene_start"],
-      "properties": {
-        "chapter_id": {"type": "string", "pattern": "^chapter-[0-9]{3,}$"},
-        "number": {"type": "integer", "minimum": 1},
-        "title": {"type": ["string", "null"], "maxLength": 120},
-        "status": {"enum": ["setup", "active"]},
-        "core_question": {"type": ["string", "null"], "maxLength": 300},
-        "pressure_source": {"type": ["string", "null"], "maxLength": 300},
-        "opened_at_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
-        "meaningful_scene_start": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
-    },
-    "chapterHistory": {
-      "type": "object",
-      "required": ["chapter_id", "number", "title", "core_question", "resolution", "pressure_source", "irreversible_changes", "opened_at_event_id", "closed_at_event_id", "meaningful_scene_end", "updated_domains"],
-      "properties": {
-        "chapter_id": {"type": "string", "pattern": "^chapter-[0-9]{3,}$"},
-        "number": {"type": "integer", "minimum": 1},
-        "title": {"type": ["string", "null"], "maxLength": 120},
-        "core_question": {"type": "string", "minLength": 1, "maxLength": 300},
-        "resolution": {"type": "string", "minLength": 1, "maxLength": 500},
-        "pressure_source": {"type": "string", "minLength": 1, "maxLength": 300},
-        "irreversible_changes": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 300}},
-        "opened_at_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
-        "closed_at_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
-        "meaningful_scene_end": {"type": "integer", "minimum": 1},
-        "updated_domains": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["goal", "relations", "clues", "world_clocks", "social", "economy", "commitments"]}}
-      },
-      "additionalProperties": false
-    },
-    "canonRecord": {
-      "type": "object",
-      "required": ["claim_id", "claim", "canon_status", "confidence", "verification", "sources", "character_access", "recorded_at_event_id", "notes"],
-      "properties": {
-        "claim_id": {"type": "string", "pattern": "^claim-[A-Za-z0-9._-]+$"},
-        "claim": {"type": "string", "minLength": 1, "maxLength": 500},
-        "canon_status": {"enum": ["primary_canon", "official_supplement", "licensed_adaptation", "secondary_lead", "game_supplement", "unknown", "disputed"]},
-        "confidence": {"enum": ["high", "medium", "low", "none"]},
-        "verification": {"enum": ["verified", "unverified", "conflict"]},
-        "sources": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["kind", "citation"],
-            "properties": {
-              "kind": {"enum": ["novel", "author_statement", "official_setting", "licensed_adaptation", "secondary", "game_rules"]},
-              "citation": {"type": "string", "minLength": 1, "maxLength": 300}
-            },
-            "additionalProperties": false
-          }
-        },
-        "character_access": {"enum": ["known", "partial", "unknown"]},
-        "recorded_at_event_id": {"$ref": "#/$defs/eventId"},
-        "notes": {"type": ["string", "null"], "maxLength": 500}
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"canon_status": {"enum": ["primary_canon", "official_supplement", "licensed_adaptation"]}}, "required": ["canon_status"]},
-          "then": {"properties": {"sources": {"minItems": 1}, "verification": {"const": "verified"}}}
-        },
-        {
-          "if": {"properties": {"canon_status": {"const": "unknown"}}, "required": ["canon_status"]},
-          "then": {"properties": {"confidence": {"const": "none"}}}
-        }
-      ],
-      "additionalProperties": false
     }
   },
   "type": "object",
-  "required": ["runtime", "campaign", "player", "relations", "social", "economy", "commitments", "preferences", "plot", "causality", "world", "knowledge", "discipline", "visuals", "roll_log"],
+  "required": ["runtime", "campaign", "player", "relations", "plot", "causality", "world", "knowledge", "discipline", "visuals", "roll_log"],
   "properties": {
     "runtime": {
       "type": "object",
       "required": ["schema_version", "state_revision", "last_event_id", "updated_at", "ruleset_version", "panel_renderer", "panel_template_version", "rng"],
       "properties": {
-        "schema_version": {"const": "1.7"},
+        "schema_version": {"const": "1.6"},
         "state_revision": {"type": "integer", "minimum": 1},
         "last_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
         "updated_at": {"type": "string", "minLength": 1, "maxLength": 80},
-        "ruleset_version": {"const": "1.7"},
+        "ruleset_version": {"const": "1.6"},
         "panel_renderer": {"enum": ["html_snapshot", "svg_snapshot", "platform_rich_text", "text"]},
         "panel_template_version": {"type": "string", "minLength": 1, "maxLength": 80},
         "rng": {
@@ -339,7 +175,7 @@
     },
     "campaign": {
       "type": "object",
-      "required": ["id", "status", "turn", "world_time", "location", "difficulty", "mode_modifier", "opportunity_counter", "pacing_profile", "chapter", "meaningful_scenes", "play_mode"],
+      "required": ["id", "status", "turn", "world_time", "location", "difficulty", "mode_modifier", "opportunity_counter", "pacing_profile", "chapter", "meaningful_scenes"],
       "properties": {
         "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
         "status": {"enum": ["active", "paused", "completed"]},
@@ -351,8 +187,7 @@
         "opportunity_counter": {"type": "integer", "minimum": 0},
         "pacing_profile": {"enum": ["紧凑", "标准", "长篇"]},
         "chapter": {"type": "integer", "minimum": 1},
-        "meaningful_scenes": {"type": "integer", "minimum": 0},
-        "play_mode": {"const": "single_protagonist"}
+        "meaningful_scenes": {"type": "integer", "minimum": 0}
       },
       "additionalProperties": true
     },
@@ -439,50 +274,9 @@
         "additionalProperties": true
       }
     },
-    "social": {
-      "type": "object",
-      "required": ["statuses", "organizations"],
-      "properties": {
-        "statuses": {"type": "array", "items": {"$ref": "#/$defs/socialStatus"}},
-        "organizations": {"type": "array", "items": {"$ref": "#/$defs/organizationStanding"}}
-      },
-      "additionalProperties": false
-    },
-    "economy": {
-      "type": "object",
-      "required": ["accounting_unit", "settlement_period", "next_settlement_at", "last_settlement_event_id", "income_streams", "recurring_costs", "debts", "scarcity"],
-      "properties": {
-        "accounting_unit": {"const": "pence"},
-        "settlement_period": {"enum": ["world_turn", "weekly"]},
-        "next_settlement_at": {"type": ["string", "null"], "maxLength": 80},
-        "last_settlement_event_id": {"$ref": "#/$defs/eventId"},
-        "income_streams": {"type": "array", "items": {"$ref": "#/$defs/cashFlow"}},
-        "recurring_costs": {"type": "array", "items": {"$ref": "#/$defs/cashFlow"}},
-        "debts": {"type": "array", "items": {"$ref": "#/$defs/financialDebt"}},
-        "scarcity": {"type": "array", "items": {"$ref": "#/$defs/scarcity"}}
-      },
-      "additionalProperties": false
-    },
-    "commitments": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/commitment"}
-    },
-    "preferences": {
-      "type": "object",
-      "required": ["horror", "gore", "romance", "canon_spoilers", "hard_limits", "updated_at_event_id"],
-      "properties": {
-        "horror": {"enum": ["low", "standard", "high"]},
-        "gore": {"enum": ["off", "restrained", "explicit"]},
-        "romance": {"enum": ["off", "ask", "enabled"]},
-        "canon_spoilers": {"enum": ["character_only", "player_confirmed_scope", "full_meta"]},
-        "hard_limits": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160}},
-        "updated_at_event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"}
-      },
-      "additionalProperties": false
-    },
     "plot": {
       "type": "object",
-      "required": ["life_goal", "completed_goals", "main", "current_action", "open_threads", "clues", "investigations", "deadlines", "chapter", "chapter_history"],
+      "required": ["life_goal", "completed_goals", "main", "current_action", "open_threads", "clues", "investigations", "deadlines"],
       "properties": {
         "life_goal": {
           "type": "object",
@@ -506,9 +300,7 @@
         "open_threads": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 300}},
         "clues": {"type": "array", "items": {"$ref": "#/$defs/clue"}},
         "investigations": {"type": "array", "items": {"$ref": "#/$defs/investigation"}},
-        "deadlines": {"type": "array"},
-        "chapter": {"$ref": "#/$defs/chapter"},
-        "chapter_history": {"type": "array", "items": {"$ref": "#/$defs/chapterHistory"}}
+        "deadlines": {"type": "array"}
       },
       "additionalProperties": true
     },
@@ -516,12 +308,11 @@
     "world": {"type": "object"},
     "knowledge": {
       "type": "object",
-      "required": ["character_known", "engine_truth", "game_supplements", "canon_records"],
+      "required": ["character_known", "engine_truth", "game_supplements"],
       "properties": {
         "character_known": {"type": "array"},
         "engine_truth": {"type": "array"},
-        "game_supplements": {"type": "array"},
-        "canon_records": {"type": "array", "items": {"$ref": "#/$defs/canonRecord"}}
+        "game_supplements": {"type": "array"}
       },
       "additionalProperties": true
     },

@@ -4,6 +4,8 @@ Read this reference when delivering the game through Telegram or another IM plat
 
 The engine commits one transport-neutral event. The adapter turns that committed event into platform messages and buttons. Presentation retries never invoke adjudication again.
 
+When local Python exists, `scripts/transport_contract.py` can validate and adapt the generic envelope for a capability profile. It is a deterministic delivery planner, not an adjudicator.
+
 ## Capability profile
 
 Detect or configure:
@@ -37,7 +39,9 @@ messages:
     body: "..."
   - kind: status_media
     media_ref: "..."
+    caption: "..."
     alt: "..."
+    fallback_text: "..."
   - kind: choices
     body: "..."
     buttons: []
@@ -66,7 +70,9 @@ The server resolves the full action from committed state. Never put secrets, pro
 
 Deduplicate all inbound updates using Telegram `update_id`. Deduplicate callback presses using the callback query identifier and the originating event sequence. Always answer callback queries promptly, while long adjudication and media work continue in the job system.
 
-For forum topics include `message_thread_id` in the campaign scope. In groups, reject actions from users outside the configured player scope unless shared-party mode explicitly permits them.
+For forum topics include `message_thread_id` in the campaign scope. In groups, reject actions from users outside the configured controller scope.
+
+v1.7 has no shared-party rules. A group may share the view, but only the configured controller can create actions; other members are spectators whose messages do not enter the game transaction.
 
 Telegram reference points:
 
@@ -83,8 +89,25 @@ Map the same envelope by capability:
 - Rich embeds available: put short state fields in the embed and attach the raster card when useful.
 - Image attachment available: send the raster card and concise alt text.
 - Buttons unavailable: send numbered choices and accept a number or free text.
-- Message editing unavailable: send a correction message; never silently rewrite a committed result.
-- Strict message limits: split narrative at paragraph boundaries and keep choices in the final message.
+- Message editing unavailable: send a correction message; never silently rewrite a committed result. A correction may name `target_message_id`; the planner edits only when the platform supports it and the correction fits one message.
+- Strict message limits: split narrative at paragraph boundaries, deliver choices afterward, and keep every option number attached to its full text.
+
+## Portable degradation contract
+
+- No filesystem: do not claim durable persistence; keep the complete digest-protected portable anchor in a private channel and import it before the next adjudication.
+- No raster image: replace status media with the same revision's rich-text summary or alt fallback. Do not omit required state information.
+- No buttons: keep numbered choices in text and accept a number or free action. Button absence cannot remove free-form play.
+- Short message limit: split at semantic or paragraph boundaries. Never separate an option number from its text, and never exceed the configured limit.
+- Duplicate webhook or callback: return the stored event or delivery result for that ingress identifier. Do not call the game engine again.
+- Media timeout: leave the outbox item pending or mark it retryable. The committed event, state revision, roll, and world time remain unchanged.
+- Multiple sessions: resolve the full scope key before the active campaign. Two chats or topics with the same actor must not share an active pointer unless explicitly configured.
+
+Run the bundled contract tests before deploying a new adapter:
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 scripts/transport_contract.py plan --envelope turn-envelope.json --capabilities transport-capabilities.json
+```
 
 ## Delivery truth
 

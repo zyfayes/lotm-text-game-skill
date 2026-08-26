@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/lotm-text-game/campaign-event.schema.json",
-  "title": "LOTM text game committed event v1.7",
+  "title": "LOTM text game committed event v1.6",
   "$defs": {
     "outcome": {"enum": ["大失败", "失败", "险成", "成功", "大成功"]},
     "risk": {"enum": ["轻微", "显著", "严重", "致命", "灾难"]},
@@ -38,51 +38,10 @@
         }
       ],
       "additionalProperties": false
-    },
-    "chapterTransition": {
-      "type": "object",
-      "required": ["closed_chapter_id", "closed_number", "resolution", "irreversible_changes", "updated_domains", "next_chapter"],
-      "properties": {
-        "closed_chapter_id": {"type": "string", "pattern": "^chapter-[0-9]{3,}$"},
-        "closed_number": {"type": "integer", "minimum": 1},
-        "resolution": {"type": "string", "minLength": 1, "maxLength": 500},
-        "irreversible_changes": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 300}},
-        "updated_domains": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["goal", "relations", "clues", "world_clocks", "social", "economy", "commitments"]}},
-        "next_chapter": {
-          "type": "object",
-          "required": ["chapter_id", "number", "core_question", "pressure_source"],
-          "properties": {
-            "chapter_id": {"type": "string", "pattern": "^chapter-[0-9]{3,}$"},
-            "number": {"type": "integer", "minimum": 2},
-            "core_question": {"type": "string", "minLength": 1, "maxLength": 300},
-            "pressure_source": {"type": "string", "minLength": 1, "maxLength": 300}
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    "economySettlement": {
-      "type": "object",
-      "required": ["period_start", "period_end", "income_pence", "cost_pence", "debt_payment_pence", "net_pence", "resulting_balance_pence", "settled_flow_ids", "settled_debt_ids"],
-      "properties": {
-        "period_start": {"type": "string", "minLength": 1, "maxLength": 80},
-        "period_end": {"type": "string", "minLength": 1, "maxLength": 80},
-        "income_pence": {"type": "integer", "minimum": 0},
-        "cost_pence": {"type": "integer", "minimum": 0},
-        "debt_payment_pence": {"type": "integer", "minimum": 0},
-        "net_pence": {"type": "integer"},
-        "resulting_balance_pence": {"type": "integer", "minimum": 0},
-        "settled_flow_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^flow-[A-Za-z0-9._-]+$"}},
-        "settled_debt_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^debt-[A-Za-z0-9._-]+$"}}
-      },
-      "additionalProperties": false
     }
   },
   "type": "object",
   "required": [
-    "schema_version",
-    "ruleset_version",
     "event_id",
     "type",
     "previous_state_revision",
@@ -97,8 +56,6 @@
     "created_at"
   ],
   "properties": {
-    "schema_version": {"const": "1.7"},
-    "ruleset_version": {"const": "1.7"},
     "event_id": {"type": "string", "pattern": "^evt-[0-9]{6,}$"},
     "type": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
     "previous_state_revision": {"type": "integer", "minimum": 0},
@@ -190,15 +147,13 @@
     },
     "visible_result": {"type": "string", "minLength": 1, "maxLength": 1000},
     "transport": {"type": ["object", "null"]},
-    "chapter_transition": {"oneOf": [{"$ref": "#/$defs/chapterTransition"}, {"type": "null"}]},
-    "economy_settlement": {"oneOf": [{"$ref": "#/$defs/economySettlement"}, {"type": "null"}]},
     "migration": {
       "type": ["object", "null"],
       "properties": {
         "from_schema_version": {"type": "string", "minLength": 1},
-        "to_schema_version": {"const": "1.7"},
+        "to_schema_version": {"const": "1.6"},
         "from_ruleset_version": {"type": "string", "minLength": 1},
-        "to_ruleset_version": {"const": "1.7"},
+        "to_ruleset_version": {"const": "1.6"},
         "notes": {"type": "string", "minLength": 1, "maxLength": 1000}
       },
       "required": ["from_schema_version", "to_schema_version", "from_ruleset_version", "to_ruleset_version", "notes"],
@@ -206,15 +161,5 @@
     },
     "created_at": {"type": "string", "minLength": 1, "maxLength": 80}
   },
-  "allOf": [
-    {
-      "if": {"properties": {"type": {"const": "chapter_closed"}}, "required": ["type"]},
-      "then": {"required": ["chapter_transition"], "properties": {"chapter_transition": {"$ref": "#/$defs/chapterTransition"}}}
-    },
-    {
-      "if": {"properties": {"type": {"const": "economy_settled"}}, "required": ["type"]},
-      "then": {"required": ["economy_settlement"], "properties": {"economy_settlement": {"$ref": "#/$defs/economySettlement"}}}
-    }
-  ],
   "additionalProperties": false
 }
