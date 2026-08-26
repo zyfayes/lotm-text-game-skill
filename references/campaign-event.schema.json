@@ -189,7 +189,6 @@
       "items": {"$ref": "#/$defs/patchOperation"}
     },
     "visible_result": {"type": "string", "minLength": 1, "maxLength": 1000},
-    "transport": {"type": ["object", "null"]},
     "chapter_transition": {"oneOf": [{"$ref": "#/$defs/chapterTransition"}, {"type": "null"}]},
     "economy_settlement": {"oneOf": [{"$ref": "#/$defs/economySettlement"}, {"type": "null"}]},
     "migration": {

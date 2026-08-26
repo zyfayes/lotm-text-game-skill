@@ -66,7 +66,7 @@ def scan_file(path: Path, max_table_columns: int = 4, max_table_line: int = 240)
                 fence_line = line_number
                 if marker[0] == "~":
                     findings.append(
-                        issue(path, line_number, "tilde-fence", "Use backtick fences; tilde fences are not portable across IM renderers.")
+                        issue(path, line_number, "tilde-fence", "Use backtick fences; tilde fences are not portable across Markdown renderers.")
                     )
             elif marker[0] == active_fence:
                 active_fence = None
@@ -87,7 +87,7 @@ def scan_file(path: Path, max_table_columns: int = 4, max_table_line: int = 240)
             )
         if RAW_HTML.search(visible):
             findings.append(
-                issue(path, line_number, "raw-html", "Raw HTML is not a portable Skill or IM rendering contract.")
+                issue(path, line_number, "raw-html", "Raw HTML is not a portable Skill Markdown contract.")
             )
         for match in MARKDOWN_LINK.finditer(visible):
             raw_target = match.group(1).strip()

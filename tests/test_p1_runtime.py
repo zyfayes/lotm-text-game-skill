@@ -134,7 +134,7 @@ class P1StateContractTests(unittest.TestCase):
             self.assertEqual(anchor["format_version"], "1.1")
             self.assertEqual(campaign_runtime.verify_anchor(anchor_path)["status"], "valid")
 
-    def test_no_filesystem_anchor_can_be_built_in_memory(self) -> None:
+    def test_portable_anchor_can_be_built_before_export(self) -> None:
         anchor = campaign_runtime.build_anchor(
             initial_state(),
             [initial_event()],

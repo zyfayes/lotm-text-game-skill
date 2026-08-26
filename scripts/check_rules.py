@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the lossless module map and single-authority index for ruleset v1.7."""
+"""Verify required rule sections, authority routing, and runtime digests."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-LEGACY_HEADING = re.compile(r"^## (【(?:卷|附录)[^\n]+】[^\n]*)$")
+SECTION_HEADING = re.compile(r"^## (【(?:卷|附录)[^\n]+】[^\n]*)$")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -68,14 +68,14 @@ def validate_rules(reference_dir: Path) -> List[str]:
         h1_count = sum(1 for line in text.splitlines() if line.startswith("# "))
         if h1_count != 1:
             errors.append(f"{name}: expected exactly one H1, found {h1_count}")
-        discovered[name] = [match.group(1) for line in text.splitlines() if (match := LEGACY_HEADING.fullmatch(line))]
+        discovered[name] = [match.group(1) for line in text.splitlines() if (match := SECTION_HEADING.fullmatch(line))]
 
     expected_by_module: Dict[str, List[str]] = {name: [] for name in modules}
     section_ids: set[str] = set()
     headings: set[str] = set()
-    for section in manifest.get("legacy_sections", []):
+    for section in manifest.get("required_sections", []):
         if not isinstance(section, dict):
-            errors.append("legacy_sections entries must be objects")
+            errors.append("required_sections entries must be objects")
             continue
         section_id = section.get("id")
         module = section.get("module")
@@ -95,7 +95,7 @@ def validate_rules(reference_dir: Path) -> List[str]:
     for name in modules:
         if discovered.get(name, []) != expected_by_module.get(name, []):
             errors.append(
-                f"{name}: legacy section order or coverage differs; expected {expected_by_module.get(name, [])!r}, found {discovered.get(name, [])!r}"
+                f"{name}: required section order or coverage differs; expected {expected_by_module.get(name, [])!r}, found {discovered.get(name, [])!r}"
             )
 
     runtime_loading = manifest.get("runtime_loading")
@@ -191,28 +191,14 @@ def validate_rules(reference_dir: Path) -> List[str]:
             if isinstance(turn_core, str) and f"]({turn_core})" not in index_text:
                 errors.append("ruleset.md does not link the compact turn core")
 
-    digest = manifest.get("legacy_body_sha256")
-    if not isinstance(digest, str) or not SHA256.fullmatch(digest):
-        errors.append("legacy_body_sha256 must be a lowercase SHA-256 digest")
-    legacy_source = manifest.get("legacy_source")
-    if not isinstance(legacy_source, dict):
-        errors.append("legacy_source must be an object")
-    else:
-        add_fields = {"repository", "commit", "path", "body_starts_at_line"}
-        if set(legacy_source) != add_fields:
-            errors.append("legacy_source fields are invalid")
-        if not isinstance(legacy_source.get("commit"), str) or not re.fullmatch(r"[0-9a-f]{40}", legacy_source.get("commit", "")):
-            errors.append("legacy_source commit must be a full lowercase git hash")
-        if legacy_source.get("path") != "references/ruleset.md" or legacy_source.get("body_starts_at_line") != 11:
-            errors.append("legacy_source path or body offset is invalid")
-    schema_digests = manifest.get("legacy_schema_sha256")
+    schema_digests = manifest.get("archived_schema_sha256")
     expected_schema_names = {
         "campaign-state.v1.6.schema.json",
         "campaign-event.v1.6.schema.json",
         "portable-anchor.v1.6.schema.json",
     }
     if not isinstance(schema_digests, dict) or set(schema_digests) != expected_schema_names:
-        errors.append("legacy_schema_sha256 must cover all three archived v1.6 schemas")
+        errors.append("archived_schema_sha256 must cover all three archived v1.6 schemas")
     else:
         for name, expected_digest in schema_digests.items():
             path = reference_dir / name

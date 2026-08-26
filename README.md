@@ -6,7 +6,7 @@ A persistent, consequence-driven text adventure inspired by *Lord of Mysteries*,
 
 Play an ordinary person living in Tingen on June 28, 1349—the same world and time in which Klein Moretti has just awakened. Choose any plausible life, pursue any faction or Pathway, interfere with familiar events, or ignore them entirely. The world keeps moving, and every meaningful action can bend its future.
 
-This is a game engine, not a scripted story. It combines open-ended role-play with explicit adjudication, durable campaign state, canon-aware knowledge boundaries, deterministic status panels, and transport contracts for local agents and IM platforms.
+This is a game engine, not a scripted story. It combines open-ended role-play with explicit adjudication, durable campaign state, canon-aware knowledge boundaries, and deterministic status panels in one Agent workspace.
 
 ## Why it is fun
 
@@ -22,7 +22,7 @@ This is a game engine, not a scripted story. It combines open-ended role-play wi
 | Sequence progression | Potions, acting, spirituality, rituals, ingredients, and loss-of-control risk form one connected advancement loop. |
 | Butterfly effects | Interventions accumulate causal weight and can redirect major story anchors without turning canon characters into puppets. |
 | No save-scumming | Rolls and consequences are committed once. Recovery restores interrupted writes; it never rerolls history. |
-| Auditable randomness | Checks use a system CSPRNG, committed HMAC stream, or verified platform RNG and store the raw roll, context, counter or platform receipt, and adjudication. |
+| Auditable randomness | Checks use the operating-system CSPRNG, a committed HMAC stream, or another verifiable runtime source and store the raw roll, context, source receipt when present, and adjudication. |
 | Three difficulty modes | Play a fate-favored adventure, a grounded ordinary life, or a hostile survival campaign. |
 | Chapters with momentum | Every chapter carries a core question and pressure source, then closes only after an irreversible change. |
 | Adjustable intensity | Horror, gore, romance, canon spoilers, and hard limits have safe defaults and can be changed without advancing game time. |
@@ -54,12 +54,11 @@ A chapter normally spans four to eight meaningful scenes, but its dramatic contr
 
 ## Core design
 
-The engine separates game truth from presentation. An HTML failure, Telegram retry, or image-generation timeout can never alter a roll or advance the clock.
+The engine separates game truth from presentation. A rendering, delivery, or image-generation failure can never alter a roll or advance the clock.
 
 ```mermaid
 flowchart TD
-    U[Player] --> T[Local Agent or IM Transport]
-    T --> A[Agent running SKILL.md]
+    U[Player] --> A[Agent running SKILL.md]
     A --> Q[Compact turn contract]
     Q --> R[Relevant authority modules]
     R --> C[Adjudication and continuity]
@@ -70,23 +69,19 @@ flowchart TD
     E --> S[Commit authoritative state]
     S --> J[Journal and portable anchor]
     S --> P[Public panel model]
-    S --> O[Capability-aware delivery plan]
     P --> H[HTML or SVG renderer]
     H --> I[PNG / JPEG / WebP]
     P --> F[Rich-text or plain-text fallback]
-    O --> F
 ```
 
 | Layer | Responsibility | Main files |
 |---|---|---|
 | Agent contract | Loads the compact turn contract, escalates to the correct authority modules, and preserves turn order | `SKILL.md`, `references/runtime-core.md` |
-| Game semantics | One authority index plus losslessly split modules for core play, canon, Pathways, adjudication, causality, presentation, and appendices | `references/ruleset.md` and its seven linked modules |
-| Persistence | Campaign scoping, append-only events, atomic state, concurrency, and recovery | `references/runtime-and-storage.md` |
-| Transport | Telegram and generic IM delivery, deduplication, buttons, and outbox behavior | `references/transport-adapters.md` |
+| Game semantics | One authority index plus seven focused modules for core play, canon, Pathways, adjudication, causality, presentation, and appendices | `references/ruleset.md` and its seven linked modules |
+| Persistence | Agent workspace, append-only events, atomic state, campaign switching, and recovery | `references/runtime-and-storage.md` |
 | Presentation | Public-data boundaries, mobile status cards, semantic color, and illustration consent | `references/visual-media.md` |
 | Deterministic UI | Validates one public model and renders self-contained HTML or SVG | `scripts/render_panel.py` |
 | Runtime integrity | Generates auditable checks and validates, commits, or recovers state patches | `scripts/roll_check.py`, `scripts/campaign_runtime.py` |
-| Transport integrity | Adapts one committed envelope to platform capabilities without re-adjudication | `scripts/transport_contract.py` |
 | Portability QA | Detects omitted rule volumes, authority drift, Markdown strikethrough hazards, raw HTML, and mobile-hostile tables | `scripts/check_rules.py`, `scripts/check_markdown.py` |
 
 ## Runtime loading and latency
@@ -95,9 +90,9 @@ Every gameplay request loads the compact `turn-core-v1` contract. Full authority
 
 `references/rules-manifest.json` binds the compact contract and cached rule files to SHA-256 digests. A cache hit is valid only when the current model can access the matching rule text. A stored flag or old conversation memory cannot stand in for the content.
 
-An IM deployment should send a revision-bound working set instead of the full event history: current state fields relevant to the action, active goal and chapter, nearby clocks and investigations, related social or economy records, the last two to four events, and any older prerequisite event references. A stale or incomplete projection falls back to authoritative state.
+An ordinary turn should load a revision-bound working set instead of the full event history: current state fields relevant to the action, active goal and chapter, nearby clocks and investigations, related social or economy records, the last two to four events, and any older prerequisite event references. A stale or incomplete projection falls back to authoritative state.
 
-Local validation, RNG, commit, and transport planning are deterministic and lightweight. Model inference, network delivery, and media rendering dominate user-visible latency. Required status information therefore has a same-revision text path when a card is delayed, while optional AI illustrations always run asynchronously after the core turn and player consent.
+Local validation, RNG, and commits are deterministic and lightweight. Model inference and media rendering dominate user-visible latency. Required status information therefore has a same-revision text path when a card is delayed, while optional AI illustrations always run asynchronously after the core turn and player consent.
 
 ## Installation
 
@@ -118,9 +113,9 @@ Other Agent runtimes that support directory-based skills can load the root `SKIL
 
 ### Automatic updates
 
-A git-installed Skill checks the trusted repository's `main` branch on its first activation in each Agent process or session. The startup hook is always invoked; a five-minute state file inside `.git` avoids repeated network calls from short-lived IM workers. Remote checks time out quickly and never block play on the installed version.
+A Git-installed Skill checks its `origin/main` once on first activation in each Agent process or session. The check has a short timeout and never blocks play on the installed version.
 
-An update is applied only when the checkout is clean, the origin matches this repository, the remote commit is a fast-forward, and the candidate passes rule, Markdown, and unit-test validation in an isolated worktree. The updater never resets local changes or touches campaign data. Copied packages keep working without self-update. Set `LOTM_AUTO_UPDATE=0` to opt out.
+An update is applied only when the checkout is clean and the remote commit is a fast-forward. The updater never resets local changes, runs the test suite during play, or touches campaign data. Copied packages keep working without self-update. Set `LOTM_AUTO_UPDATE=0` to opt out. Run the standard validation suite before publishing changes to `main`.
 
 ## What happens when a campaign starts
 
@@ -136,24 +131,18 @@ Campaigns start with an ordinary person or, for a balanced custom background, at
 
 New campaigns use the v1.7 state and event contracts. Content defaults are written immediately—standard horror, restrained gore, romance by consent, character-only canon spoilers, and no supplied hard limits—without adding a long setup interview. Players can change them at any time.
 
-The formal rules support one protagonist and one authoritative controller. A group chat may watch the same campaign, but other participants are spectators; voting, rotating control, PvP, concurrent secrets, and multi-character parties are intentionally outside v1.7.
+Each campaign has one protagonist and one authoritative action sequence.
 
 The original v1.6 schemas remain byte-preserved compatibility resources. Installing v1.7 never rewrites a v1.6 campaign automatically; migration requires an explicit request and an appended migration event. Earlier v1.2–v1.5 ledgers can be recognized and continuity-checked in read-only mode, while write, recovery, and anchor-export operations stay blocked until explicit migration.
 
 ## Campaign persistence
 
-Resolve the data location before creating a campaign:
+The Agent stores every campaign under its writable workspace. The user may supply another workspace root, but the selected absolute path stays fixed for the session. Live data never belongs inside the reusable Skill package.
 
-```bash
-python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project --create
-```
-
-Local mode defaults to the explicit workspace root. Telegram, Hermes, Web, and other service deployments must set `LOTM_DATA_ROOT` or pass `--data-root`; the engine never derives persistent storage from an ambient working directory. The resolver refuses the filesystem root, the user home directory itself, and the reusable Skill package.
-
-Under the resolved data root, the engine maintains:
+The engine maintains:
 
 ```text
-<resolved-data-root>/campaigns/
+<agent-workspace>/.lotm-text-game/campaigns/
 ├── active.yaml
 └── <campaign_id>/
     ├── state.yaml
@@ -165,11 +154,11 @@ Under the resolved data root, the engine maintains:
 
 `state.yaml` is the latest authoritative state. `events.jsonl` is an append-only audit trail. The journal contains only facts the character has experienced or confirmed. Hidden world state and character knowledge remain separate.
 
-The v1.7 runtime retains goal evidence, clues and investigations, public stakes, RNG provenance, consequences, and old-value-checked state patches. It also validates organization authority, social standing, commitments, financial flows, chapter transitions, content preferences, and canon-source confidence. Local agents can validate or recover a campaign with:
+The v1.7 runtime records goal evidence, clues and investigations, public stakes, RNG provenance, consequences, and old-value-checked state patches. It also validates organization authority, social standing, commitments, financial flows, chapter transitions, content preferences, and canon-source confidence. Local agents can validate or recover a campaign with:
 
 ```bash
-python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/runtime-root/campaigns/example-campaign
-python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/runtime-root/campaigns/example-campaign
+python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/workspace/.lotm-text-game/campaigns/example-campaign
+python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/workspace/.lotm-text-game/campaigns/example-campaign
 ```
 
 The check helper can inspect calibrated odds or generate a real roll:
@@ -179,25 +168,6 @@ python3 scripts/roll_check.py odds --mode ordinary --target 100 --attribute 45 -
 python3 scripts/roll_check.py roll --mode ordinary --target 100 --attribute 45 --skill 10 \
   --context evt-000042:inspect-door
 ```
-
-Service deployments may map the same records to SQLite, PostgreSQL, or object storage, but must preserve version checks, idempotency, transaction order, and recovery semantics.
-
-## Cross-platform behavior
-
-The game commits an event before presentation. A capability-aware planner then adapts the same revision to Telegram or another IM surface.
-
-| Platform constraint | Deterministic behavior |
-|---|---|
-| No writable filesystem | Build a digest-protected portable anchor in memory, mark persistence as degraded, and keep hidden state out of group chat. |
-| No image attachment | Replace the status card with the same revision's required text summary. |
-| No buttons | Send atomic numbered options while preserving the free-action instruction. |
-| Short message limits | Split at semantic boundaries and reject an option that cannot remain attached to its number. |
-| No message editing | Send an explicit correction as a new message. |
-| Duplicate webhook or callback | Return the stored result for that ingress identifier; never invoke the engine twice. |
-| Media timeout | Keep delivery pending or retryable; the event, roll, state revision, and world time stay unchanged. |
-| Multiple chats or topics | Resolve a full scope key and controller before loading an active campaign. |
-
-The transport planner is pure standard-library Python and can run without reading or writing files when the host supplies in-memory objects.
 
 ## Rendering status panels
 
@@ -215,7 +185,7 @@ python3 scripts/render_panel.py \
   --output status.svg
 ```
 
-The generated HTML and SVG are self-contained. For Telegram, Discord, and similar chat platforms, rasterize them to PNG, JPEG, or WebP before delivery. If visual rendering fails, the engine falls back to platform-rich text and then plain text without changing campaign state.
+The generated HTML and SVG are self-contained. If the current interface cannot display them directly, rasterize them to PNG, JPEG, or WebP. If visual rendering fails, the engine falls back to rich text and then plain text without changing campaign state.
 
 The UI does not use a universal MMO-style rarity ladder. Sealed Artifact grades, event danger, Sequence level, formula confidence, and publicly confirmed item types remain separate concepts. Color supports those known meanings but never performs a hidden appraisal.
 
@@ -250,22 +220,19 @@ The UI does not use a universal MMO-style rarity ladder. Sealed Artifact grades,
 │   ├── presentation.md
 │   ├── appendices.md
 │   ├── runtime-and-storage.md
-│   ├── transport-adapters.md
 │   └── visual-media.md
 ├── scripts/
 │   ├── campaign_runtime.py
-│   ├── transport_contract.py
 │   ├── check_rules.py
 │   ├── check_markdown.py
-│   ├── runtime_paths.py
 │   ├── self_update.py
 │   ├── roll_check.py
 │   └── render_panel.py
 └── tests/
     ├── test_p0_runtime.py
     ├── test_p1_runtime.py
-    ├── test_startup_runtime.py
-    └── test_transport_contract.py
+    ├── test_self_update.py
+    └── test_portability.py
 ```
 
 Run the standard-library regression suite with:
@@ -278,9 +245,9 @@ python3 scripts/check_markdown.py README.md README_CN.md SKILL.md references
 
 ## Safety and privacy
 
-- Live campaign data, player media, chat identifiers, credentials, and bot tokens do not belong in the reusable Skill.
+- Live campaign data, generated player media, and credentials do not belong in the reusable Skill.
 - Player-visible panels and image prompts may contain only publicly established facts.
-- Duplicate webhooks, callback retries, or failed uploads must never adjudicate the same action twice.
+- Recovery or repeated output must never adjudicate the same player action twice.
 - Optional illustrations are cosmetic. They cannot create items, reveal secrets, consume resources, or advance time.
 
 ## Disclaimer

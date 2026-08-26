@@ -34,13 +34,13 @@
 
 1. 公开层是玩家可见的状态面板、结算和前情提要；隐藏层是 AI 的权威状态账本。角色不知道的真相只进入隐藏层，不得因面板或审计泄露。
 2. 每次结算完成后、写下一段剧情前，先更新账本。正文、面板和账本冲突时，以最近一次有依据的结算为准，立即修正其余两处并向玩家说明。
-3. 在 ChatGPT、Codex 或其他具备项目文件系统的环境中，文件账本而非聊天上下文是跨回合状态的权威来源。聊天记忆不足时必须先读取文件，不得要求玩家重复已经落盘的信息，也不得猜测缺失数值。
+3. 在具备项目文件系统的 Agent 环境中，文件账本是跨回合状态的权威来源。聊天记忆不足时必须先读取文件，不得要求玩家重复已经落盘的信息，也不得猜测缺失数值。
 
 ### 二、持久化存储（硬性规则）
 
-本节定义逻辑记录和本地文件基准。运行环境具备项目文件系统时必须使用下列目录；Telegram Bot、Web 服务或其他多租户环境可以把同一组记录等价映射到数据库或对象存储，但不得改变字段职责、只追加事件、版本校验、事务顺序与恢复语义。具体映射见 Skill 的 `runtime-and-storage.md`。
+本节定义权威记录和文件基准。Agent 在自己的可写工作目录中保存战役；字段职责、只追加事件、版本校验、事务顺序与恢复语义不得改变。具体落点见 Skill 的 `runtime-and-storage.md`。
 
-1. 运行环境只要提供可写文件系统，每局游戏就必须在已经解析的数据根下创建独立目录：`campaigns/<campaign_id>/`，并用 `campaigns/active.yaml` 指向当前战役。本地 Agent 的数据根默认为显式传入的项目根；Telegram Bot、Web 服务和其他长期进程必须显式配置 `LOTM_DATA_ROOT` 或使用等价数据库映射。禁止从进程的临时当前目录猜测落点，也禁止把战役写入可复用 Skill 包。
+1. 每局游戏必须在 `<agent-workspace>/.lotm-text-game/campaigns/<campaign_id>/` 创建独立目录，并用 `campaigns/active.yaml` 指向当前战役。Agent 使用当前工作区，或使用用户明确提供的其他可写工作区；会话中固定复用同一绝对路径。禁止把战役写入可复用 Skill 包。
 2. `campaign_id` 在角色命名后生成并全局固定，建议格式为 `lotm-YYYYMMDD-角色名短标识`。AI 在输出首次状态面板前，须静默完成目录与初始账本创建；文件操作不得插入玩家可见的额外回复，也不得延迟面板必弹规则。
 3. 标准目录结构如下：
 
@@ -61,16 +61,16 @@ campaigns/
    - `events.jsonl`：只追加、不覆盖的完整审计日志；每行一个 JSON 事件，记录行动、骰点、修正、状态增减和纠错。
    - `journal.md`：玩家可见的冒险编年史，只记录角色已经经历或确认的事实。
    - `canon-deviations.md`：记录原锚点、玩家干预、因果值、新结果及连锁影响；未被角色知晓的内容不得复制进 `journal.md`。
-   - `latest-anchor.md`：最近一次可移植的记忆之锚，供换对话、换模型或文件系统不可用时恢复；它不是回档点。
+   - `latest-anchor.md`：最近一次可移植的记忆之锚，供换对话、换模型或迁移工作区时恢复；它不是回档点。
 5. `state.yaml`、`events.jsonl` 与 `canon-deviations.md` 属于引擎层，可能包含剧透。默认不在正文中展示；玩家主动打开所得属于玩家的元知识，不能自动转化为角色知识。文件名和目录隔离只是防误读，不构成安全权限。
 6. 每次产生游戏内状态变化的回合都必须落盘；单纯询问规则、查看状态、审计、纠错讨论或现实时间等待不推进世界，也不制造空事件。玩家输入「暂停」、会话即将结束或章节结束时，必须先完成所有待写入内容。
-7. 项目文件系统若为临时存储，而运行环境另有持久化项目存储，则每个状态变化回合至少同步 `active.yaml`、`state.yaml` 与 `events.jsonl`；章节结束、暂停和会话结束前再同步整个战役目录。同步静默完成，不得每回合用技术提示破坏沉浸感；也不得宣称已经持久化而实际只留在临时对话上下文中。
+7. 每个状态变化回合至少可靠写入 `active.yaml`、`state.yaml` 与 `events.jsonl`；章节结束、暂停和会话结束前再确认整个战役目录完整。文件操作静默完成，不得每回合用技术提示破坏沉浸感；也不得宣称已经持久化而实际只留在对话上下文中。
 
 ### 三、权威状态账本（`state.yaml`）
 
 ```yaml
 runtime:
-  {schema_version, state_revision, last_event_id, updated_at, ruleset_version, panel_renderer, panel_template_version, renderer_capabilities, transport_profile, last_renderer_failure, rng}
+  {schema_version, state_revision, last_event_id, updated_at, ruleset_version, panel_renderer, panel_template_version, renderer_capabilities, last_renderer_failure, rng}
 campaign: {id, status, turn, world_time, location, difficulty, mode_modifier, opportunity_counter, pacing_profile, chapter, meaningful_scenes}
 player:
   {name, gender, background, identity, faction, pathway, sequence, acting}
@@ -98,7 +98,7 @@ causality: [{anchor, value, threshold, interventions, status}]
 world: {canon_anchor_status, changed_events, faction_clocks, known_npc_states}
 knowledge: {character_known, engine_truth, game_supplements}
 discipline: {cheat_level, heaven_brand, warnings}
-visuals: {illustration_mode, character_bible, item_bible, last_scene_event_id, transport_cache}
+visuals: {illustration_mode, character_bible, item_bible, last_scene_event_id}
 roll_log: [{event_id, context, rng_method, counter, platform_result_id, raw, formula, target, base_result, final_result, overflow_edge}]
 ```
 
@@ -109,7 +109,7 @@ roll_log: [{event_id, context, rng_method, counter, platform_result_id, raw, for
 5. `campaign.status` 只取 `active`／`paused`／`completed`。暂停、退休或死亡时同步更新 `active.yaml`；已完成战役永久保留，但不得继续写入，除非纠正系统记录且明确追加 `correction` 事件。
 6. `panel_renderer` 只记录最近一次已确认可用的模式：`html_snapshot`／`svg_snapshot`／`platform_rich_text`／`text`；`panel_template_version` 记录面板协议版本。
 7. 界面模式变化可以增加 `state_revision`，但 `campaign.turn`、`world_time`、机会计数器、世界时钟与角色状态保持不变；对应事件类型为 `interface_setting_changed`，不得写入 `journal.md` 或正典偏移记录。
-8. `transport_profile` 记录平台、会话范围与能力，不得保存机器人令牌或其他密钥；`visuals` 只保存公开视觉连续性和用户插图偏好，禁止装入角色未知的引擎真相。
+8. `visuals` 只保存公开视觉连续性和用户插图偏好，禁止装入角色未知的引擎真相或任何凭据。
 9. v1.6 状态、事件和可移植记忆锚分别遵循 `campaign-state.v1.6.schema.json`、`campaign-event.v1.6.schema.json` 与 `portable-anchor.v1.6.schema.json`。既有 v1.6 战役继续使用这些契约，禁止因安装新版 Skill 自动改写。
 10. v1.7 新战役遵循通用名称的 `campaign-state.schema.json`、`campaign-event.schema.json` 与 `portable-anchor.schema.json`。事件显式记录 `schema_version` 和 `ruleset_version`；运行时仍必须能够验证 v1.6 历史。
 
@@ -136,7 +136,7 @@ knowledge: {..., canon_records: []}
 ```
 
 1. `relations` 只表示个人态度；`social` 记录社会语境与组织权力；`commitments` 记录非金钱义务；`economy.debts` 记录金额。四类字段不能互相替代。
-2. `campaign.play_mode` 在 v1.7 固定为 `single_protagonist`。控制者身份属于传输范围配置，不放入可移植公开状态或面板。
+2. `campaign.play_mode` 在 v1.7 固定为 `single_protagonist`。
 3. 所有组织变化、社会地位、现金流、债务、承诺、偏好、章节历史和正典记录都必须引用存在的事件。引用断裂、ID 重复或越权权限视为状态校验失败。
 4. 金钱始终以规范化的金镑／苏勒／便士保存当前余额，长期经济以便士计算；章节关闭和经济结算使用各自带结构化元数据的事件，不能只写自然语言摘要。
 
@@ -153,9 +153,9 @@ knowledge: {..., canon_records: []}
 
 每次更新至少检查：当前灵性不超过上限；理智、污染、扮演度和气运均在合法范围；1 金镑 = 20 苏勒、1 苏勒 = 12 便士；物品增减有来源；伙伴数值不复制玩家；时间单调前进；同一因果不重复计分；关系变化有依据；世界时钟与日历不冲突；作弊阶梯与警告记录一致；目标证据引用已存在事件；线索 ID、调查 ID 与事件 ID 唯一；证实线索有交叉依据；事件修订号连续；骰点包含合法随机源和 1～100 的原始值。v1.7 还要检查：组织权限与承诺引用、经济结算算术与余额、债务和现金流来源、章节号及关闭事件、不可逆变化、偏好来源、正典状态与来源置信度。具备本地执行能力时，每次提交前后运行 `scripts/campaign_runtime.py validate`。
 
-### 六、前情提要、迁移与无文件系统降级
+### 六、前情提要与迁移
 
 1. 每次章节小结由 AI 主动输出 3～5 条「前情提要」，再更新 `latest-anchor.md`：时间地点、角色核心状态、关键物品与关系、未决线索、世界时钟变化，以及 `campaign_id`、`state_revision` 和 `last_event_id`。
 2. 玩家可以补充或纠错，但不承担替 AI 记忆的义务。记忆之锚是连续运行所需的检查点，不是存档，不允许据此回退或重掷。
 3. 察觉前后矛盾时，保留原记录，新增更正项并说明依据；不得静默重写已发生事件。
-4. 只有确认运行环境确实没有可写文件系统时，才进入降级模式：每个章节及会话结束时输出一份可复制的 YAML 记忆之锚；新会话必须先导入它。恢复文件系统后应立即据此创建标准目录，并把后续事件继续落盘。v1.7 记忆锚格式为 1.1，仍包含隐藏状态且必须做摘要校验，禁止发到群聊。
+4. 迁移战役时导出 v1.7 格式 1.1 的记忆之锚；导入前必须验证摘要。记忆之锚包含隐藏状态，只能作为私密文件处理。

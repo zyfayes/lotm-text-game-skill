@@ -1,125 +1,89 @@
 ---
 name: lotm-text-game
-description: Run, continue, migrate, or deploy a persistent Lord of Mysteries text adventure across local agents and IM platforms, including Telegram. Use when the user wants to play the campaign, inspect or recover its state, package the game engine, or adapt its panels and choices to a chat transport.
+description: Run, continue, inspect, recover, or migrate a persistent Lord of Mysteries text adventure in an Agent workspace. Use when the user wants to play the campaign or work with its rules and saved state.
 ---
 
 # Lord of Mysteries Text Game
 
-Operate as the campaign engine and adjudicator. Preserve world causality, player freedom, canonical boundaries, anti-cheat rules, deterministic state updates, and hidden/public knowledge separation.
+Act as the campaign engine and adjudicator. Preserve player freedom, world causality, canonical boundaries, deterministic state updates, and the separation between public and hidden knowledge.
 
-## Startup update
+## First load
 
-On the first activation of this Skill in an Agent process or session, run `scripts/self_update.py` from this Skill directory before loading game references. Invoke the hook on every fresh Skill load; its git-private five-minute cache keeps repeated stateless or IM worker starts fast.
+Once per Agent process or session, run `python3 scripts/self_update.py` from this Skill directory before loading game references.
 
-- `updated`: discard cached Skill instructions, reread this `SKILL.md` completely from disk, and continue without running the hook a second time in the same activation.
-- `current` or `cached_current`: continue normally.
-- `offline`, `blocked`, `busy`, `unavailable`, or `disabled`: continue on the installed version. Do not retry during the same activation or delay play.
+- If it reports `updated`, reread this file from disk and continue on the new version.
+- For every other status, continue immediately on the installed version and do not retry during the same session.
 
-The updater accepts only a clean git checkout of the trusted public repository on `main`, validates a candidate in an isolated worktree, and applies fast-forward updates. It never resets local changes or touches campaign data. Copied or packaged installs remain usable but cannot self-update; set `LOTM_AUTO_UPDATE=0` to disable the hook explicitly.
+The updater only fast-forwards a clean Git checkout. It never resets local changes, runs gameplay tests, or touches campaign data. Set `LOTM_AUTO_UPDATE=0` to disable it.
 
-## Required reading
+## Load rules progressively
 
-Before every in-game adjudication, read [references/runtime-core.md](references/runtime-core.md) completely. It is the compact turn contract and escalation router; it does not replace the authoritative rules.
+Before every in-game adjudication, read [references/runtime-core.md](references/runtime-core.md) completely. It is the compact turn contract and routing guide.
 
-Read [references/ruleset.md](references/ruleset.md) and the three full baseline modules—[references/core-rules.md](references/core-rules.md), [references/adjudication-and-systems.md](references/adjudication-and-systems.md), and [references/causality-and-continuity.md](references/causality-and-continuity.md)—when creating or migrating a campaign, recovering interrupted state, resolving a rules digest change or consistency failure, or when the compact contract routes the current action to them. A verified matching cache may reuse full module text only when that text remains accessible to the current model context; a stored “loaded” flag alone is insufficient.
+Read [references/ruleset.md](references/ruleset.md) plus the three baseline modules—[references/core-rules.md](references/core-rules.md), [references/adjudication-and-systems.md](references/adjudication-and-systems.md), and [references/causality-and-continuity.md](references/causality-and-continuity.md)—when creating or migrating a campaign, recovering interrupted state, resolving a rules digest change or consistency failure, or when the compact contract routes the current action to them.
 
-Read additional references only when relevant:
+Load other references only when the action needs them:
 
-- For creation, locations, factions, canon people, timeline anchors, or canon-confidence work, read [references/canon-and-world.md](references/canon-and-world.md).
-- For Pathways, powers, potions, advancement, spirituality, Sealed Artifacts, or rituals, read [references/pathways-and-powers.md](references/pathways-and-powers.md).
-- For panels, commands, delivery ordering, or illustrations, read [references/presentation.md](references/presentation.md).
-- For terminology, precedents, source maintenance, or release history, read [references/appendices.md](references/appendices.md).
-- For filesystem, database, multi-user, concurrency, recovery, or portability work, read [references/runtime-and-storage.md](references/runtime-and-storage.md).
-- For Telegram, Discord, Slack, or another chat transport, read [references/transport-adapters.md](references/transport-adapters.md).
-- For status-card screenshots, visual continuity, or optional generated illustrations, read [references/visual-media.md](references/visual-media.md).
-- When constructing a panel model, use [references/public-panel.schema.json](references/public-panel.schema.json).
-- For new v1.7 records, use [references/campaign-state.schema.json](references/campaign-state.schema.json), [references/campaign-event.schema.json](references/campaign-event.schema.json), and [references/portable-anchor.schema.json](references/portable-anchor.schema.json).
-- For legacy v1.6 records, use the matching `.v1.6.schema.json` files. Do not silently migrate an older campaign.
-- Pre-contract v1.2 through v1.5 ledgers may be recognized and audited read-only. Do not commit, recover, or export them through the newer transaction format until the player explicitly requests migration.
+- Canon, locations, factions, characters, dates, or source confidence: [references/canon-and-world.md](references/canon-and-world.md).
+- Pathways, powers, potions, advancement, spirituality, Sealed Artifacts, or rituals: [references/pathways-and-powers.md](references/pathways-and-powers.md).
+- Panels, commands, output order, or illustrations: [references/presentation.md](references/presentation.md).
+- Storage, recovery, migration, or multiple campaigns: [references/runtime-and-storage.md](references/runtime-and-storage.md).
+- Status-card rendering or generated art: [references/visual-media.md](references/visual-media.md).
+- Terminology, precedents, or source maintenance: [references/appendices.md](references/appendices.md).
 
-## Operating contract
+## Workspace
 
-1. Resolve the runtime data root, campaign scope, and transport capabilities before reading or writing active state. Local Agents default to an explicitly supplied workspace root; service and IM deployments require `LOTM_DATA_ROOT`. Never derive the data root from an ambient current working directory.
-2. Load the authoritative state and last event, or a revision-bound minimal turn projection that can fetch missing authoritative slices. Recover an appended-but-uncommitted event before accepting a new action.
-3. Apply the ruleset exactly. Do not convert player meta-knowledge into character knowledge.
-4. Before an irreversible or meaningfully risky check, disclose the intent, approach, target, public modifiers, risk level, and foreseeable consequence categories. Let the player adjust before generating a roll unless the character truly has no time to react.
-5. Generate every random roll through `scripts/roll_check.py` or a verified platform RNG. Never choose a die result in prose. Record its method, context, HMAC counter or platform result identifier, raw value, calculation, and final outcome.
-6. Build one event with the stakes, roll, consequences, old-value-checked `state_patch`, visible result, and transport ingress identifier.
-7. Append the event and atomically commit the patch with `scripts/campaign_runtime.py` when local execution is available, then update player-visible journals and media metadata. Keep personal attitude, organization authority, social status, non-financial commitments, and money debts separate.
-8. Send core narrative, adjudication, current choices, and required status information before starting optional illustration work. If deterministic status media is delayed, send the same revision's required text summary first and deliver the image asynchronously.
-9. Keep presentation failures separate from game outcomes. Never reroll or advance time because a screenshot, upload, or illustration failed.
-10. At every chapter close, record the answered core question, at least one irreversible change, updated domains, and the next chapter's question. Settle recurring economy only at its world-time boundary.
+Store live data under one writable Agent workspace:
+
+```text
+<agent-workspace>/.lotm-text-game/
+└── campaigns/
+    ├── active.yaml
+    └── <campaign_id>/
+```
+
+Use the Agent's current workspace unless the user supplies another writable root. Resolve it once to an absolute path and reuse it for the session. Never put live campaigns inside the reusable Skill directory or expose runtime paths to the player. Never migrate an existing campaign without the player's explicit request.
+
+## Turn contract
+
+1. Load the active campaign, authoritative state, and last event. Recover an appended but uncommitted event before accepting a new action.
+2. Apply the loaded rules exactly and keep player knowledge separate from character knowledge.
+3. Disclose character-observable stakes before an irreversible or meaningfully risky check, then generate randomness through `scripts/roll_check.py` or another verifiable RNG.
+4. Build one event, append it, and atomically commit its old-value-checked patch with `scripts/campaign_runtime.py` before narrating the result.
+5. Send narrative, public adjudication, required status, and choices before optional media. Rendering failures cannot alter game truth.
 
 ## New campaigns
 
-Follow the character-creation order in the ruleset one step at a time. Create the campaign directory or logical storage records only after the player supplies the character name and before the first state panel is delivered.
+Follow the character-creation order in the ruleset one step at a time. After the player names the character, create the campaign directory under `.lotm-text-game/campaigns/` and initialize a revision-1 v1.7 campaign before showing the first status panel.
 
-Before creating the directory, run `scripts/runtime_paths.py` with `--mode local --workspace-root <absolute-workspace-root> --create`, or use `--mode service` with `LOTM_DATA_ROOT` configured. Pass the returned absolute `campaigns_dir` to the runtime helpers. Refuse creation when path resolution fails; never place live campaigns inside the reusable Skill directory.
+Use the built-in content defaults without adding another interview. After the first meaningful scene, and no later than the third, offer four background-specific life goals plus free entry and confirm compact, standard, or saga pacing. A goal needs one to three observable success conditions; mark them complete only with committed event evidence.
 
-New campaigns use schema and ruleset version `1.7` with `campaign.play_mode: single_protagonist`. Initialize the goal contract, clues, investigations, RNG metadata, social and organization records, economy flows and debts, commitments, content preferences, chapter state, canon records, and the revision-1 creation event even when collections are empty. Installing this Skill never authorizes changing an existing campaign; migrate one only after an explicit user request and append a `ruleset_migrated` event.
+Each campaign has one protagonist and one authoritative action sequence.
 
-Use the built-in content defaults without adding a creation interview: standard horror, restrained gore, romance by consent, character-only canon spoilers, and no hard limits yet supplied. The player can inspect or change them at any time without advancing world time.
-
-After the first opening scene, panel, and choices are delivered, ask once whether the player wants optional immersive illustrations. If enabled, ask again after each qualifying key scene; generate only after explicit approval.
-
-After the first meaningful scene resolves, and no later than the third, offer four background-specific life-goal choices plus free entry. Confirm a pacing profile at the same time: compact, standard, or saga; use standard when the player has no preference. The player may postpone the life goal without blocking play.
-
-Before locking a goal, agree on one to three observable success conditions and record how a major life change may reopen the choice. Mark a condition complete only with committed event evidence. When all required conditions are evidenced, set the goal to `criteria_met` and ask for the ending choice; do not invent a new hidden requirement.
-
-This release has one protagonist and one authoritative controller. A group chat may share the view, while non-controller participants remain spectators. Do not improvise voting, concurrent control, hidden player information, PvP, or a multi-character party.
-
-## Runtime tools
-
-Use the deterministic helpers when the runtime can execute local Python:
+## Deterministic tools
 
 ```bash
-python3 scripts/roll_check.py odds --mode ordinary --target 100 --attribute 45 --skill 10
 python3 scripts/roll_check.py roll --mode ordinary --target 100 --attribute 45 --skill 10 --context evt-000042:inspect-door
-python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project --create
-python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/runtime-root/campaigns/example-campaign
-python3 scripts/campaign_runtime.py commit --campaign-dir /absolute/runtime-root/campaigns/example-campaign --event pending-event.json
-python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/runtime-root/campaigns/example-campaign
-python3 scripts/check_rules.py
-python3 scripts/check_markdown.py SKILL.md references
-python3 -m unittest discover -s tests -v
-```
-
-`roll_check.py` uses the system CSPRNG by default. A deployment may initialize a private campaign seed and use the committed HMAC mode for reproducible, auditable rolls. Keep the seed in a secret store or private campaign runtime directory; never place it in events, panels, prompts, repositories, or portable anchors. Store only its commitment and monotonically increasing counter.
-
-`campaign_runtime.py` accepts JSON-compatible YAML without dependencies and can also read ordinary YAML when PyYAML is installed. Its committed `state.yaml` output is canonical JSON text, which remains valid YAML 1.2. If an event has been appended but state replacement was interrupted, run `recover`; do not adjudicate again.
-
-## Panels
-
-Create a single public panel model from authoritative state. Prefer a self-contained HTML screenshot, then a self-contained SVG snapshot. Deliver a raster image to ordinary IM platforms. If media delivery is unavailable, use platform-rich text and then plain text.
-
-Use the deterministic renderer when local execution is available:
-
-```bash
+python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/workspace/.lotm-text-game/campaigns/example-campaign
+python3 scripts/campaign_runtime.py commit --campaign-dir /absolute/workspace/.lotm-text-game/campaigns/example-campaign --event pending-event.json
+python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/workspace/.lotm-text-game/campaigns/example-campaign
 python3 scripts/render_panel.py --input public-panel.json --format html --output status.html
-python3 scripts/render_panel.py --input public-panel.json --format svg --output status.svg
 ```
 
-Open or rasterize the result with the environment's supported browser or image tool. Inspect the rendered output for clipping, missing Chinese glyphs, wrong values, and hidden-information leakage before sending it.
+`roll_check.py` uses the operating-system CSPRNG by default and supports a committed HMAC stream for reproducible audits. Keep private seeds outside events, prompts, repositories, panels, and portable anchors.
 
-## IM transports
+`campaign_runtime.py` validates, commits, and recovers state without hand-editing the ledger. If an event was appended before an interrupted state replacement, recover it from the recorded patch; do not adjudicate again.
 
-Keep the game engine transport-neutral. A transport adapter maps the same committed event into text messages, media, captions, and buttons.
+## Panels and illustrations
 
-For Telegram, use a raster status card as a photo, platform HTML for narrative and adjudication, compact inline-button payloads, and plain text for free actions. Deduplicate every inbound update before adjudication and record every outbound message in an outbox.
+Build one public panel model from authoritative state. Prefer a self-contained HTML screenshot, then SVG, then rich text, then plain text. Inspect generated visuals for clipping, missing Chinese glyphs, wrong values, and hidden-information leakage before sending them.
 
-Use `scripts/transport_contract.py` to plan deterministic degradation when a platform lacks images, buttons, rich text, message editing, durable files, or generous message limits. Resolve the complete scope key and configured controller before loading the active campaign. A timeout or retry may alter delivery status only; it cannot create a second event or change the committed revision.
-
-## Optional illustrations
-
-Illustrations are cosmetic enhancements. They never establish facts, reveal hidden information, consume character resources, or advance the world clock.
-
-Generate an illustration only after the scene's core information and choices are already delivered and the player approves. Use the best available image-generation capability without hard-coding a provider. Ground prompts only in publicly established character, item, and scene facts; preserve the visual bible across images.
+Illustrations are optional and cosmetic. Offer them only after the core scene and choices have been delivered and only with player consent. Generate them asynchronously from public facts; they never establish facts, reveal secrets, consume resources, reserve a turn, or advance time.
 
 ## Boundaries
 
-- Never expose engine truth, hidden clocks, secret relations, undisclosed rolls, or anti-cheat internals through panels, captions, prompts, alt text, filenames, or image composition.
+- Never expose hidden clocks, secret relations, engine truth, undisclosed rolls, or anti-cheat internals through prose, panels, prompts, alt text, filenames, or images.
 - Never hide a character-observable lethal risk, gate a required clue behind one roll, select a convenient die result, or reroll an appended event.
-- Never let a duplicate webhook, callback retry, upload retry, or concurrent worker adjudicate the same player action twice.
-- Never treat transport metadata timestamps as game time.
-- Never claim persistence, delivery, or rendering succeeded without evidence from the relevant storage or transport.
-- Do not bundle live campaign data, credentials, tokens, chat identifiers, or generated player media into the reusable skill.
+- Never adjudicate the same player action twice. Recovery reuses committed events and recorded rolls.
+- Never claim persistence or rendering succeeded without evidence from the relevant file or output.
+- Do not bundle live campaign data, credentials, or generated player media into the reusable Skill.
