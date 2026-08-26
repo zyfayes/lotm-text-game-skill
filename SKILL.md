@@ -9,13 +9,9 @@ Operate as the campaign engine and adjudicator. Preserve world causality, player
 
 ## Required reading
 
-Before creating, continuing, adjudicating, recovering, or migrating a campaign, read [references/ruleset.md](references/ruleset.md) completely. It is the authority map for the losslessly split rules and tells you which modules to load.
+Before every in-game adjudication, read [references/runtime-core.md](references/runtime-core.md) completely. It is the compact turn contract and escalation router; it does not replace the authoritative rules.
 
-Before any in-game adjudication, read these three modules completely:
-
-- [references/core-rules.md](references/core-rules.md)
-- [references/adjudication-and-systems.md](references/adjudication-and-systems.md)
-- [references/causality-and-continuity.md](references/causality-and-continuity.md)
+Read [references/ruleset.md](references/ruleset.md) and the three full baseline modules—[references/core-rules.md](references/core-rules.md), [references/adjudication-and-systems.md](references/adjudication-and-systems.md), and [references/causality-and-continuity.md](references/causality-and-continuity.md)—when creating or migrating a campaign, recovering interrupted state, resolving a rules digest change or consistency failure, or when the compact contract routes the current action to them. A verified matching cache may reuse full module text only when that text remains accessible to the current model context; a stored “loaded” flag alone is insufficient.
 
 Read additional references only when relevant:
 
@@ -34,13 +30,13 @@ Read additional references only when relevant:
 ## Operating contract
 
 1. Resolve the campaign scope and transport capabilities before reading or writing active state.
-2. Load the authoritative state and last event. Recover an appended-but-uncommitted event before accepting a new action.
+2. Load the authoritative state and last event, or a revision-bound minimal turn projection that can fetch missing authoritative slices. Recover an appended-but-uncommitted event before accepting a new action.
 3. Apply the ruleset exactly. Do not convert player meta-knowledge into character knowledge.
 4. Before an irreversible or meaningfully risky check, disclose the intent, approach, target, public modifiers, risk level, and foreseeable consequence categories. Let the player adjust before generating a roll unless the character truly has no time to react.
 5. Generate every random roll through `scripts/roll_check.py` or a verified platform RNG. Never choose a die result in prose. Record its method, context, HMAC counter or platform result identifier, raw value, calculation, and final outcome.
 6. Build one event with the stakes, roll, consequences, old-value-checked `state_patch`, visible result, and transport ingress identifier.
 7. Append the event and atomically commit the patch with `scripts/campaign_runtime.py` when local execution is available, then update player-visible journals and media metadata. Keep personal attitude, organization authority, social status, non-financial commitments, and money debts separate.
-8. Send core narrative, adjudication, current choices, and required status information before starting optional media work.
+8. Send core narrative, adjudication, current choices, and required status information before starting optional illustration work. If deterministic status media is delayed, send the same revision's required text summary first and deliver the image asynchronously.
 9. Keep presentation failures separate from game outcomes. Never reroll or advance time because a screenshot, upload, or illustration failed.
 10. At every chapter close, record the answered core question, at least one irreversible change, updated domains, and the next chapter's question. Settle recurring economy only at its world-time boundary.
 

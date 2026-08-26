@@ -27,6 +27,14 @@ Local files, SQLite, PostgreSQL, object storage, or an Agent platform database m
 
 When the ruleset names `state.yaml`, `events.jsonl`, `journal.md`, `canon-deviations.md`, `latest-anchor.md`, or `active.yaml`, a service runtime may satisfy that rule through the corresponding logical record below. The filename expresses record semantics, not a mandatory physical storage engine.
 
+## Rule context cache
+
+Every adjudication request includes [runtime-core.md](runtime-core.md). A deployment may cache the larger rule modules by the `ruleset_digest` declared in [rules-manifest.json](rules-manifest.json), but the cached content must remain accessible to the model that performs the adjudication. A database receipt without the corresponding text is not a valid cache hit.
+
+Keep rule context cache outside campaign truth. It may record the profile ID, ruleset digest, verified module names, content bytes or an immutable prompt-prefix reference, and verification time. Never use it as a game event or let a cache miss advance world time. On a digest mismatch, discard the old context and follow the bootstrap loading route before adjudicating.
+
+For ordinary turns, construct a revision-bound working set containing the fields required by [runtime-core.md](runtime-core.md). Bind it to the source `state_revision` and preferably a canonical state digest. Load only the recent and prerequisite events required for the action; fetch more authoritative slices when the router or adjudicator detects a missing dependency. If the projection is stale or incomplete, fall back to the full state rather than guessing.
+
 ## Campaign scope
 
 Use a stable scope key before resolving the active campaign:
@@ -87,6 +95,7 @@ transport_outbox(outbox_id, campaign_id, event_id, payload, status, platform_mes
 campaign_media(media_id, campaign_id, event_id, kind, public_facts_hash, platform_file_id)
 campaign_rng(campaign_id, method, next_counter, seed_commitment, secret_ref)
 campaign_controllers(scope_key, actor_id, status)
+ruleset_context_cache(ruleset_digest, profile_id, content_ref, verified_modules, verified_at)
 ```
 
 The physical schema may vary. The uniqueness and transaction constraints may not:
@@ -103,7 +112,7 @@ The physical schema may vary. The uniqueness and transaction constraints may not
 1. Resolve the scope and verify that the actor is the configured controller. Spectator input may be stored as discussion but cannot enter adjudication.
 2. Deduplicate the transport ingress identifier.
 3. Lock the campaign scope or begin a serializable transaction.
-4. Read active campaign, latest state, and last event.
+4. Read active campaign and a revision-bound turn working set plus the last event. Fetch missing authoritative slices or the full state before adjudication when required.
 5. Recover any event appended after the last committed state.
 6. For a risky action, construct and deliver the public stakes specification; allow the player to revise an unrolled approach. This pre-roll exchange does not create a game event or advance world time.
 7. Generate the raw die through an approved RNG and immediately bind it to a stable context and counter.
@@ -142,7 +151,7 @@ Button callbacks use the callback query identifier as an additional ingress iden
 - Store rolls inside the event before narrative delivery.
 - Recover appended events from their recorded `state_patch` without rerolling.
 - Keep real timestamps separate from world time.
-- Media jobs may run concurrently after the event commits because they cannot mutate game truth.
+- Deterministic status media and optional illustration jobs may run concurrently after the event commits because they cannot mutate game truth. Send required status text first when rendering is delayed; optional illustration work never blocks the next player action.
 
 `state_patch` uses `add`, `replace`, and `remove` operations with JSON Pointer paths. `replace` and `remove` carry the expected old value; a mismatch stops the commit rather than overwriting newer state. Revision, last event ID, and real update time are runtime-managed fields and cannot appear in a patch.
 

@@ -73,6 +73,20 @@ def validate_button(value: Any, payload_limit: int) -> Dict[str, str]:
     return {"label": label, "payload": payload}
 
 
+def validate_optional_media_offer(value: Any, event_id: str) -> Optional[Dict[str, Any]]:
+    if value is None:
+        return None
+    require(isinstance(value, dict), "optional_media_offer must be an object")
+    require(
+        set(value) == {"scene_event_id", "execution", "blocks_turn"},
+        "optional_media_offer fields are invalid",
+    )
+    require(value.get("scene_event_id") == event_id, "optional_media_offer must reference the envelope event")
+    require(value.get("execution") == "async", "optional media must execute asynchronously")
+    require(value.get("blocks_turn") is False, "optional media cannot block the campaign turn")
+    return value
+
+
 def validate_envelope(value: Any, payload_limit: int) -> Dict[str, Any]:
     require(isinstance(value, dict), "envelope must be an object")
     required = {"event_id", "state_revision", "messages"}
@@ -104,6 +118,7 @@ def validate_envelope(value: Any, payload_limit: int) -> Dict[str, Any]:
             f"messages/{index}/target_message_id is invalid",
         )
         require(target_message_id is None or kind == "correction", f"messages/{index}/target_message_id is only valid for correction")
+    validate_optional_media_offer(value.get("optional_media_offer"), value["event_id"])
     return value
 
 

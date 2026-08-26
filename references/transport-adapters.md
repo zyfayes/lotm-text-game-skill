@@ -47,7 +47,11 @@ messages:
     buttons: []
 optional_media_offer:
   scene_event_id: evt-000128
+  execution: async
+  blocks_turn: false
 ```
+
+An optional-media offer is valid only with `execution: async` and `blocks_turn: false`. The adapter must reject a synchronous or turn-blocking illustration configuration rather than silently delaying play.
 
 Split messages only at semantic boundaries. Keep the timestamp with narrative, the formula summary with adjudication, and every option with its number.
 
@@ -56,7 +60,7 @@ Split messages only at semantic boundaries. Keep the timestamp with narrative, t
 Recommended sequence:
 
 1. Send narrative and public adjudication with `sendMessage` using Telegram HTML entities.
-2. If a panel is required, send its PNG, JPEG, or WebP through `sendPhoto` with a short caption.
+2. If a panel is required and already rendered, send its PNG, JPEG, or WebP through `sendPhoto` with a short caption. If rendering or upload is delayed, send the same revision's required status summary as text and enqueue the image separately.
 3. Send choices with an Inline Keyboard. Keep the constant free-action instruction in text.
 4. If the player approved a scene illustration, deliver it as a separate photo tied to the originating event.
 
@@ -68,7 +72,7 @@ g:<campaign-short-id>:<event-seq>:<choice>
 
 The server resolves the full action from committed state. Never put secrets, prose, hidden data, or mutable state in callback data.
 
-Deduplicate all inbound updates using Telegram `update_id`. Deduplicate callback presses using the callback query identifier and the originating event sequence. Always answer callback queries promptly, while long adjudication and media work continue in the job system.
+Deduplicate all inbound updates using Telegram `update_id`. Deduplicate callback presses using the callback query identifier and the originating event sequence. Always answer callback queries promptly, while long adjudication and media work continue in the job system. AI illustration work is always asynchronous and cannot hold the campaign lock or delay acceptance of the next action.
 
 For forum topics include `message_thread_id` in the campaign scope. In groups, reject actions from users outside the configured controller scope.
 
@@ -99,7 +103,7 @@ Map the same envelope by capability:
 - No buttons: keep numbered choices in text and accept a number or free action. Button absence cannot remove free-form play.
 - Short message limit: split at semantic or paragraph boundaries. Never separate an option number from its text, and never exceed the configured limit.
 - Duplicate webhook or callback: return the stored event or delivery result for that ingress identifier. Do not call the game engine again.
-- Media timeout: leave the outbox item pending or mark it retryable. The committed event, state revision, roll, and world time remain unchanged.
+- Media timeout: leave the outbox item pending or mark it retryable. If required status media is delayed, deliver its same-revision text fallback; optional illustrations remain asynchronous. The committed event, state revision, roll, and world time remain unchanged.
 - Multiple sessions: resolve the full scope key before the active campaign. Two chats or topics with the same actor must not share an active pointer unless explicitly configured.
 
 Run the bundled contract tests before deploying a new adapter:

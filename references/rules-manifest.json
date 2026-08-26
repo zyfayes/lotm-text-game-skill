@@ -22,10 +22,33 @@
     "appendices.md"
   ],
   "always_read_for_adjudication": [
-    "core-rules.md",
-    "adjudication-and-systems.md",
-    "causality-and-continuity.md"
+    "runtime-core.md"
   ],
+  "runtime_loading": {
+    "profile_id": "turn-core-v1",
+    "turn_core": "runtime-core.md",
+    "turn_core_sha256": "1ea11a45df54236f053ece820039ef18d12f48787101006a85100feb9143013e",
+    "bootstrap_modules": [
+      "core-rules.md",
+      "adjudication-and-systems.md",
+      "causality-and-continuity.md"
+    ],
+    "cache_files": [
+      "ruleset.md",
+      "runtime-core.md",
+      "core-rules.md",
+      "canon-and-world.md",
+      "pathways-and-powers.md",
+      "adjudication-and-systems.md",
+      "causality-and-continuity.md",
+      "presentation.md",
+      "appendices.md",
+      "runtime-and-storage.md",
+      "transport-adapters.md",
+      "visual-media.md"
+    ],
+    "ruleset_digest": "131a5a380d9fd38f0ac73debd655c9d8249789f1c2b806ebb4d7768aef693554"
+  },
   "legacy_sections": [
     {"id": "volume-1", "module": "core-rules.md", "heading": "【卷壹 · 星界律典】运行总纲与不可违铁则"},
     {"id": "volume-2", "module": "core-rules.md", "heading": "【卷贰 · 混沌三途】难度体系"},

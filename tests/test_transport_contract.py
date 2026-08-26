@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -94,6 +95,20 @@ class TransportCapabilityTests(unittest.TestCase):
         self.assertEqual(updated["event_id"], source["event_id"])
         self.assertEqual(updated["state_revision"], source["state_revision"])
 
+    def test_optional_illustration_must_be_async_and_non_blocking(self) -> None:
+        source = envelope()
+        source["optional_media_offer"] = {
+            "scene_event_id": source["event_id"],
+            "execution": "async",
+            "blocks_turn": False,
+        }
+        planned = transport_contract.adapt_envelope(source, capabilities())
+        self.assertEqual(planned["optional_media_offer"], source["optional_media_offer"])
+
+        source["optional_media_offer"]["execution"] = "sync"
+        with self.assertRaisesRegex(transport_contract.TransportContractError, "asynchronously"):
+            transport_contract.adapt_envelope(source, capabilities())
+
     def test_correction_becomes_new_message_when_editing_is_unavailable(self) -> None:
         source = {
             "event_id": "evt-000128",
@@ -151,3 +166,28 @@ class PortabilityChecksTests(unittest.TestCase):
 
     def test_rules_manifest_covers_every_legacy_volume(self) -> None:
         self.assertEqual(check_rules.validate_rules(SKILL_ROOT / "references"), [])
+
+    def test_runtime_loading_profile_is_digest_bound(self) -> None:
+        reference_dir = SKILL_ROOT / "references"
+        manifest = check_rules.load_manifest(reference_dir)
+        loading = manifest["runtime_loading"]
+        self.assertEqual(manifest["always_read_for_adjudication"], ["runtime-core.md"])
+        self.assertEqual(
+            loading["ruleset_digest"],
+            check_rules.build_ruleset_digest(
+                reference_dir,
+                manifest["ruleset_version"],
+                loading["profile_id"],
+                loading["cache_files"],
+            ),
+        )
+
+    def test_runtime_core_drift_invalidates_cached_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            copied = Path(temporary) / "references"
+            shutil.copytree(SKILL_ROOT / "references", copied)
+            runtime_core = copied / "runtime-core.md"
+            runtime_core.write_text(runtime_core.read_text(encoding="utf-8") + "\n缓存漂移测试。\n", encoding="utf-8")
+            errors = check_rules.validate_rules(copied)
+            self.assertIn("runtime_loading turn_core_sha256 differs from runtime core", errors)
+            self.assertIn("runtime_loading ruleset_digest differs from cached rule files", errors)

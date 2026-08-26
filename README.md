@@ -60,7 +60,8 @@ The engine separates game truth from presentation. An HTML failure, Telegram ret
 flowchart TD
     U[Player] --> T[Local Agent or IM Transport]
     T --> A[Agent running SKILL.md]
-    A --> R[Task-loaded rule modules]
+    A --> Q[Compact turn contract]
+    Q --> R[Relevant authority modules]
     R --> C[Adjudication and continuity]
     C --> D{Check required?}
     D -->|Yes| G[Auditable d100 RNG]
@@ -78,7 +79,7 @@ flowchart TD
 
 | Layer | Responsibility | Main files |
 |---|---|---|
-| Agent contract | Loads the correct rules and preserves turn order | `SKILL.md` |
+| Agent contract | Loads the compact turn contract, escalates to the correct authority modules, and preserves turn order | `SKILL.md`, `references/runtime-core.md` |
 | Game semantics | One authority index plus losslessly split modules for core play, canon, Pathways, adjudication, causality, presentation, and appendices | `references/ruleset.md` and its seven linked modules |
 | Persistence | Campaign scoping, append-only events, atomic state, concurrency, and recovery | `references/runtime-and-storage.md` |
 | Transport | Telegram and generic IM delivery, deduplication, buttons, and outbox behavior | `references/transport-adapters.md` |
@@ -87,6 +88,16 @@ flowchart TD
 | Runtime integrity | Generates auditable checks and validates, commits, or recovers state patches | `scripts/roll_check.py`, `scripts/campaign_runtime.py` |
 | Transport integrity | Adapts one committed envelope to platform capabilities without re-adjudication | `scripts/transport_contract.py` |
 | Portability QA | Detects omitted rule volumes, authority drift, Markdown strikethrough hazards, raw HTML, and mobile-hostile tables | `scripts/check_rules.py`, `scripts/check_markdown.py` |
+
+## Runtime loading and latency
+
+Every gameplay request loads the compact `turn-core-v1` contract. Full authority modules are loaded for campaign creation, migration, recovery, digest changes, consistency failures, and only the rule domains touched by an ordinary turn. The complete rules remain authoritative; the compact contract supplies safety invariants and a conservative escalation router.
+
+`references/rules-manifest.json` binds the compact contract and cached rule files to SHA-256 digests. A cache hit is valid only when the current model can access the matching rule text. A stored flag or old conversation memory cannot stand in for the content.
+
+An IM deployment should send a revision-bound working set instead of the full event history: current state fields relevant to the action, active goal and chapter, nearby clocks and investigations, related social or economy records, the last two to four events, and any older prerequisite event references. A stale or incomplete projection falls back to authoritative state.
+
+Local validation, RNG, commit, and transport planning are deterministic and lightweight. Model inference, network delivery, and media rendering dominate user-visible latency. Required status information therefore has a same-revision text path when a card is delayed, while optional AI illustrations always run asynchronously after the core turn and player consent.
 
 ## Installation
 

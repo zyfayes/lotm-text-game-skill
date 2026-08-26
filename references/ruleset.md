@@ -22,11 +22,15 @@
 
 ## 按任务加载
 
-任何游戏内行动裁决都必须先完整读取：
+任何游戏内行动裁决都必须先完整读取 [runtime-core.md](runtime-core.md)。它只提供常规回合安全不变量、最小上下文和升级路由，不新增或覆盖游戏语义。
+
+新建战役、显式迁移、故障恢复、规则摘要变化、状态版本异常或一致性失败时，必须完整读取本索引以及下列三个基线模块：
 
 1. [core-rules.md](core-rules.md)
 2. [adjudication-and-systems.md](adjudication-and-systems.md)
 3. [causality-and-continuity.md](causality-and-continuity.md)
+
+其他常规回合按 [runtime-core.md](runtime-core.md) 的升级条件完整读取相关权威模块。匹配 `ruleset_digest` 的持续会话上下文或不可变提示缓存可以复用已经提供给当前模型的完整文本；仅有数据库标记或旧会话记忆时仍视为未加载。
 
 再按当前任务完整读取相关模块：
 
@@ -35,7 +39,7 @@
 - 生成状态面板、提示、插图或 IM 消息：读取 [presentation.md](presentation.md)。
 - 解释术语、核对维护来源或审计版本变化：读取 [appendices.md](appendices.md)。
 
-纯存储恢复可以只读取本索引、[causality-and-continuity.md](causality-and-continuity.md) 与 [runtime-and-storage.md](runtime-and-storage.md)，但恢复后若要继续裁决，仍须加载三个必读游戏模块。
+纯存储恢复可以只读取本索引、[causality-and-continuity.md](causality-and-continuity.md) 与 [runtime-and-storage.md](runtime-and-storage.md)；恢复后若要继续裁决，必须读取 [runtime-core.md](runtime-core.md)，并按行动命中的升级条件加载权威模块。
 
 ## 单一权威定义
 
