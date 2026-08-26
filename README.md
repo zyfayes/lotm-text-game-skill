@@ -21,6 +21,28 @@ This is a game engine, not a scripted story. It combines open-ended role-play wi
 | Three difficulty modes | Play a fate-favored adventure, a grounded ordinary life, or a hostile survival campaign. |
 | Optional illustrations | Important people, objects, and scenes can receive generated artwork after the core turn is complete and the player agrees. |
 
+## Winning, losing, and campaign length
+
+After the first meaningful scene, the Agent offers four life goals tailored to the character's background and public story hooks, plus a free-entry option. Typical directions include freedom, truth or revenge, Beyonder mastery, status or belonging, and protecting someone or changing a fate.
+
+| Outcome | Meaning |
+|---|---|
+| Victory | The life goal is fulfilled and the player chooses to conclude the campaign. |
+| Unfinished | The player retires before completing the current life goal. |
+| Defeat | The character irreversibly dies, loses control, is assimilated, or permanently loses agency with no plausible in-world recovery. |
+
+Completing a goal opens an ending choice; it does not force the campaign to stop. The player may archive that goal and choose another. Temporary failure, imprisonment, debt, injury, or a broken relationship remains part of play rather than an automatic defeat.
+
+Every ending also receives an independent legacy scale—Mortal, Beyonder, Legendary, or Mythic—based on causal impact rather than Sequence alone. A mortal can win and leave a legend; a powerful Beyonder can fail.
+
+| Pacing profile | Expected shape |
+|---|---|
+| Compact | About 12–20 meaningful scenes across 3–4 chapters |
+| Standard | About 30–60 meaningful scenes across 5–8 chapters; the default |
+| Saga | 80+ meaningful scenes for multi-city, multi-faction, or high-Sequence play |
+
+These are visible expectations, not hard turn limits. A meaningful scene must contain a real choice, discovery, consequence, relationship change, or world advance. If two consecutive scenes produce none of those, the Agent must compress the transition or move to the next effective node. Players can change pacing at any time without changing difficulty or advancing the world clock.
+
 ## Core design
 
 The engine separates game truth from presentation. An HTML failure, Telegram retry, or image-generation timeout can never alter a roll or advance the clock.
@@ -73,6 +95,7 @@ Other Agent runtimes that support directory-based skills can load the root `SKIL
 4. The player names the protagonist.
 5. The engine creates the durable campaign ledger and immediately renders the first status panel.
 6. The opening scene begins with free-form actions and suggested choices.
+7. After the first meaningful scene, the player chooses or writes a life goal and confirms the campaign pacing.
 
 Campaigns start with an ordinary person or, for a balanced custom background, at most a Sequence 9 Beyonder with a real cost attached.
 

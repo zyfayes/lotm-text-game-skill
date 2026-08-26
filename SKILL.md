@@ -34,6 +34,8 @@ Follow the character-creation order in the ruleset one step at a time. Create th
 
 After the first opening scene, panel, and choices are delivered, ask once whether the player wants optional immersive illustrations. If enabled, ask again after each qualifying key scene; generate only after explicit approval.
 
+After the first meaningful scene resolves, and no later than the third, offer four background-specific life-goal choices plus free entry. Confirm a pacing profile at the same time: compact, standard, or saga; use standard when the player has no preference. The player may postpone the life goal without blocking play.
+
 ## Panels
 
 Create a single public panel model from authoritative state. Prefer a self-contained HTML screenshot, then a self-contained SVG snapshot. Deliver a raster image to ordinary IM platforms. If media delivery is unavailable, use platform-rich text and then plain text.
