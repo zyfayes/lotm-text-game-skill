@@ -1018,7 +1018,7 @@ def validate_event(event: Any) -> List[str]:
         required[0:0] = ["schema_version", "ruleset_version"]
     for key in required:
         add_error(errors, key in event, f"event missing key: {key}")
-    allowed_event_fields = set(required) | {"transport", "migration"}
+    allowed_event_fields = set(required) | {"migration"}
     if version == "1.7":
         allowed_event_fields |= {"chapter_transition", "economy_settlement"}
     add_error(errors, set(event).issubset(allowed_event_fields), "event contains an unsupported field")
@@ -1158,7 +1158,6 @@ def validate_event(event: Any) -> List[str]:
             if op == "replace":
                 add_error(errors, "value" in operation, f"state_patch/{index} replace requires value")
 
-    add_error(errors, event.get("transport") is None or isinstance(event.get("transport"), dict), "transport must be an object or null")
     if version == "1.7":
         chapter_transition = event.get("chapter_transition")
         economy_settlement = event.get("economy_settlement")

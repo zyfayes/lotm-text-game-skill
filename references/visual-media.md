@@ -2,13 +2,15 @@
 
 Read this reference when generating status-card screenshots, character or item art, or key-scene illustrations.
 
+Panel triggers, illustration consent, scene eligibility, and public-information boundaries are defined in [presentation.md](presentation.md). This file only defines visual execution.
+
 ## Visual panel pipeline
 
 1. Build and validate one public panel model against [public-panel.schema.json](public-panel.schema.json).
 2. Generate self-contained HTML when browser screenshot capability exists; otherwise generate self-contained SVG.
-3. Render or rasterize to a platform-safe image.
+3. Render or rasterize to an image format supported by the current Agent environment.
 4. Inspect the actual image for clipping, Chinese glyphs, wrong values, unreadable type, and hidden-information leakage.
-5. Send the image through the transport adapter with concise alt text.
+5. Send the image with concise alt text.
 
 The panel is deterministic UI. Do not use an image-generation model to draw numeric state cards because it may alter text and values. Generated art may be used only as a non-semantic decorative layer behind deterministic text; removing that layer must not remove or change any game information.
 
@@ -43,27 +45,7 @@ Existing rule-backed levels map as follows:
 - body and mind states use their explicit severity labels; healthy/clear states remain distinct from warning and dangerous states
 - sequence color derives only from the public sequence number; it does not expose pathway secrets or hidden combat strength
 
-Use the same mapping in HTML, SVG, rich text accents, captions, and generated-media metadata. Platforms without color keep the labels and optional `rank_label` unchanged.
-
-## Illustration consent
-
-After the first opening scene, panel, and choices, ask whether immersive illustrations should be enabled. If enabled, ask again only after qualifying key scenes and only after all core game information has been delivered.
-
-The player can continue acting while an illustration is generated. Media completion does not reserve the turn or freeze the campaign.
-
-## Key-scene qualification
-
-Offer an illustration for:
-
-- finalized player appearance
-- first entrance into a major location
-- first encounter with a key NPC or important item
-- sequence advancement
-- major relationship change
-- fate-anchor deviation
-- chapter climax or ending
-
-Do not offer one for routine travel, shopping, repeated combat exchanges, rules questions, status checks, or media retries.
+Use the same mapping in HTML, SVG, rich text accents, captions, and generated-media metadata. Interfaces without color keep the labels and optional `rank_label` unchanged.
 
 ## Prompt grounding
 
@@ -78,10 +60,10 @@ Action: [current visible moment]
 Mood: restrained Victorian occult mystery, fog, material detail, cinematic natural light
 Continuity: [visual bible facts]
 Exclude: readable UI text, hidden characters, secret symbols, future events, unconfirmed items, engine-only facts
-Aspect ratio: [transport-appropriate]
+Aspect ratio: [output-appropriate]
 ```
 
-Choose the best available image-generation capability at runtime. Provider-specific model names belong in deployment configuration, not campaign rules.
+Choose the best available image-generation capability at runtime. Provider-specific model names belong to the Agent environment, not campaign rules.
 
 ## Illustration art direction
 
@@ -112,7 +94,6 @@ visuals:
       distinguishing_marks: []
   item_bible: {}
   last_scene_event_id: null
-  transport_cache: {}
 ```
 
 An image cannot establish new facts. If generated art introduces an unmentioned ring, scar, person, rune, or object, treat it as decorative noise unless later confirmed in text through a legitimate event.
@@ -121,6 +102,6 @@ An image cannot establish new facts. If generated art introduces an unmentioned 
 
 - Never place undiscovered villains, secret observers, hidden symbols, future injuries, pathway clues, or engine truth into an image.
 - Never reveal a hidden object's appearance before the player sees it.
-- Do not put private transport identifiers, filesystem paths, prompts containing hidden state, or credentials into metadata or captions.
+- Do not put private session identifiers, filesystem paths, prompts containing hidden state, or credentials into metadata or captions.
 - If an illustration conflicts with committed text, the text and state remain authoritative.
 - Record media generation as a media event linked to the scene event; do not add it to the adventure journal unless it confirms no new facts.

@@ -6,7 +6,7 @@
 
 你将在纪元 1349 年 6 月 28 日的廷根醒来，与刚刚苏醒的克莱恩·莫雷蒂生活在同一座城市、同一段历史中。你可以选择任何合理的人生，追随不同途径与势力，干预熟悉的事件，也可以完全绕开它们。世界不会等待玩家，每一次有意义的行动都可能改变未来。
 
-这是一套游戏引擎，而非预先写好的互动小说。它把自由角色扮演、明确判定、持久化战役、正典知识边界、确定性状态面板与 IM 平台适配组合在一起。
+这是一套游戏引擎，而非预先写好的互动小说。它在一个 Agent 工作区中组合自由角色扮演、明确判定、持久化战役、正典知识边界与确定性状态面板。
 
 ## 为什么好玩
 
@@ -22,7 +22,7 @@
 | 序列成长 | 魔药、扮演、灵性、仪式、材料与失控风险构成完整的晋升循环。 |
 | 蝴蝶效应 | 玩家干预会积累因果值，可以改变重大命运锚点，却无法把正典角色变成傀儡。 |
 | 不可读档重掷 | 骰点与后果只结算一次；故障恢复只修复中断写入，不会重掷历史。 |
-| 可审计随机 | 判定使用系统安全随机源、已承诺的 HMAC 随机流或平台可验证随机源，并记录原始骰、上下文、计数器或平台凭证，以及最终裁决。 |
+| 可审计随机 | 判定使用操作系统安全随机源、已承诺的 HMAC 随机流或其他可验证运行时随机源，并记录原始骰、上下文、适用时的来源凭证，以及最终裁决。 |
 | 三种难度 | 可以体验命运眷顾、平凡求生，或者充满恶意的地狱旅程。 |
 | 有推进力的章节 | 每章都有核心问题和压力源，只有产生不可逆变化后才能关闭。 |
 | 可调内容强度 | 恐怖、血腥、恋爱、原著剧透与硬性避雷项采用安全默认值，并可随时调整。 |
@@ -54,12 +54,11 @@
 
 ## 核心架构
 
-游戏事实与表现层完全分离。HTML 渲染失败、Telegram 重试或图片生成超时，都不能改变骰点、推进时间或重写战役状态。
+游戏事实与表现层完全分离。渲染、发送或图片生成失败，都不能改变骰点、推进时间或重写战役状态。
 
 ```mermaid
 flowchart TD
-    U[玩家] --> T[本地 Agent 或 IM 适配器]
-    T --> A[运行 SKILL.md 的 Agent]
+    U[玩家] --> A[运行 SKILL.md 的 Agent]
     A --> Q[精简常规回合契约]
     Q --> R[当前领域的权威模块]
     R --> C[行动裁决与连续性]
@@ -70,34 +69,30 @@ flowchart TD
     E --> S[提交权威状态]
     S --> J[编年史与可移植记忆锚]
     S --> P[公开面板模型]
-    S --> O[按平台能力生成投递计划]
     P --> H[HTML 或 SVG 渲染器]
     H --> I[PNG / JPEG / WebP]
     P --> F[富文本或纯文字降级]
-    O --> F
 ```
 
 | 层级 | 职责 | 主要文件 |
 |---|---|---|
 | Agent 契约 | 加载精简回合契约、按领域升级读取权威模块，并保证事务顺序 | `SKILL.md`、`references/runtime-core.md` |
-| 游戏语义 | 一个权威索引，以及完整拆分的核心、正典、途径、裁决、因果、呈现和附录模块 | `references/ruleset.md` 及其链接的七个模块 |
-| 持久化 | 战役隔离、只追加事件、原子状态、并发与恢复 | `references/runtime-and-storage.md` |
-| 传输层 | Telegram 与通用 IM 投递、去重、按钮和 outbox | `references/transport-adapters.md` |
+| 游戏语义 | 一个权威索引，以及分别负责核心、正典、途径、裁决、因果、呈现和附录的七个模块 | `references/ruleset.md` 及其链接的七个模块 |
+| 持久化 | Agent 工作区、只追加事件、原子状态、战役切换与恢复 | `references/runtime-and-storage.md` |
 | 表现层 | 公开信息边界、移动端状态卡、语义色与插图授权 | `references/visual-media.md` |
 | 确定性 UI | 校验公开模型并生成自包含 HTML 或 SVG | `scripts/render_panel.py` |
 | 运行时完整性 | 生成可审计判定，并校验、提交或恢复状态补丁 | `scripts/roll_check.py`、`scripts/campaign_runtime.py` |
-| 传输完整性 | 按平台能力调整同一个已提交回合，不重新裁决 | `scripts/transport_contract.py` |
 | 可移植性检查 | 检测规则卷缺失、权威漂移、Markdown 删除线风险、原始 HTML 与移动端过宽表格 | `scripts/check_rules.py`、`scripts/check_markdown.py` |
 
 ## 运行时加载与速度
 
 每次游戏内请求只固定加载 `turn-core-v1` 精简契约。新建、迁移、恢复、规则摘要变化、一致性失败时读取三份完整基线模块；普通回合只在触及对应规则领域时升级读取相关权威模块。完整规则仍是唯一权威，精简契约只保存安全不变量和保守升级路由。
 
-`references/rules-manifest.json` 使用 SHA-256 摘要绑定精简契约与可缓存规则文件。只有当前模型确实能够访问摘要匹配的规则文本时，才算缓存命中；数据库标记或旧会话记忆不能代替内容。
+`references/rules-manifest.json` 使用 SHA-256 摘要绑定精简契约与可缓存规则文件。只有当前模型确实能够访问摘要匹配的规则文本时，才算缓存命中；保存的标记或旧会话记忆不能代替内容。
 
-IM 服务默认提交与状态修订绑定的最小工作集：本次行动相关状态、当前志向与章节、临近时钟与调查、相关社会或经济记录、最近 2～4 条事件，以及更早前置事件的引用。投影过期或字段不足时回退到权威状态，禁止猜测。
+普通回合默认读取与状态修订绑定的最小工作集：本次行动相关状态、当前志向与章节、临近时钟与调查、相关社会或经济记录、最近 2～4 条事件，以及更早前置事件的引用。投影过期或字段不足时回退到权威状态，禁止猜测。
 
-本地校验、随机、事务提交与传输规划均为轻量确定性操作。真实体感主要受模型推理、网络投递与媒体渲染影响。因此状态卡延迟时先发送同一修订的文字状态；可选 AI 插图只在核心回合和玩家授权完成后异步运行。
+本地校验、随机与事务提交均为轻量确定性操作。真实体感主要受模型推理与媒体渲染影响。因此状态卡延迟时先发送同一修订的文字状态；可选 AI 插图只在核心回合和玩家授权完成后异步运行。
 
 ## 安装
 
@@ -118,9 +113,9 @@ git clone https://github.com/zyfayes/lotm-text-game-skill.git \
 
 ### 自动更新
 
-通过 Git 安装的 Skill 会在每个 Agent 进程或会话首次加载时检查可信公开仓库的 `main` 分支。启动钩子每次都会调用；`.git` 内的五分钟检查缓存可以避免短生命周期 IM Worker 重复访问网络。远端检查会快速超时，任何失败都不会阻止使用当前已安装版本继续游戏。
+通过 Git 安装的 Skill 会在每个 Agent 进程或会话首次加载时检查一次 `origin/main`。检查使用短超时，任何失败都不会阻止使用当前版本继续游戏。
 
-只有工作区干净、origin 与本仓库一致、远端提交能够快进，并且候选版本在隔离 worktree 中通过规则、Markdown 和单元测试校验时，才会自动更新。更新器不会重置本地改动，也不会接触战役数据。复制安装仍可正常使用，但不具备自更新能力。设置 `LOTM_AUTO_UPDATE=0` 可以关闭自动更新。
+只有工作区干净且远端提交能够快进时才会自动更新。更新器不会重置本地改动、不会在游玩时运行测试，也不会接触战役数据。复制安装仍可正常使用，但不具备自更新能力。向 `main` 发布改动前应运行标准校验。设置 `LOTM_AUTO_UPDATE=0` 可以关闭自动更新。
 
 ## 一局游戏如何开始
 
@@ -136,24 +131,18 @@ git clone https://github.com/zyfayes/lotm-text-game-skill.git \
 
 新战役使用 v1.7 状态和事件契约。引擎会直接写入默认内容设置：标准恐怖、克制血腥、恋爱内容先征求同意、只按角色知识处理原著剧透，以及尚未填写硬性避雷项；不会为此增加冗长的开局问卷，玩家可以随时修改。
 
-正式规则只支持一名主角和一名权威控制者。群聊可以共同围观，但其他成员属于观众；多人投票、轮流控制、玩家对抗、并发秘密与多角色队伍不属于 v1.7。
+每个战役只有一名主角和一条权威行动序列。
 
 原始 v1.6 Schema 作为兼容资源原样保留。安装 v1.7 不会自动改写 v1.6 战役；迁移需要玩家明确提出，并追加迁移事件。更早的 v1.2 至 v1.5 账本可以在只读模式下识别版本并校验事件连续性，在明确迁移前仍会拒绝写入、恢复和记忆锚导出。
 
 ## 战役持久化
 
-创建战役前先解析数据落点：
+Agent 把所有战役保存在自己的可写工作区中。用户可以提供另一处工作区，但本次会话会固定复用同一个绝对路径。真实战役数据永远不写进可复用 Skill 包。
 
-```bash
-python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project --create
-```
-
-本地模式默认使用显式传入的项目根。Telegram、Hermes、Web 等服务部署必须设置 `LOTM_DATA_ROOT` 或传入 `--data-root`；引擎不会从进程的临时工作目录推断持久化位置。解析器会拒绝文件系统根目录、用户主目录本身以及可复用 Skill 包。
-
-解析后的数据根使用以下结构：
+目录结构如下：
 
 ```text
-<resolved-data-root>/campaigns/
+<agent-workspace>/.lotm-text-game/campaigns/
 ├── active.yaml
 └── <campaign_id>/
     ├── state.yaml
@@ -165,11 +154,11 @@ python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project
 
 `state.yaml` 保存最新权威状态，`events.jsonl` 是只追加的完整审计记录。编年史只记录角色亲历或已经确认的事实；隐藏世界状态与角色知识严格分离。
 
-v1.7 运行时继续记录目标证据、线索与调查、公开风险、随机来源、后果及带旧值校验的状态补丁，同时校验组织权限、社会地位、承诺、财务循环、章节切换、内容偏好与正典来源置信度。本地 Agent 可以运行：
+v1.7 运行时记录目标证据、线索与调查、公开风险、随机来源、后果及带旧值校验的状态补丁，同时校验组织权限、社会地位、承诺、财务循环、章节切换、内容偏好与正典来源置信度。本地 Agent 可以运行：
 
 ```bash
-python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/runtime-root/campaigns/example-campaign
-python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/runtime-root/campaigns/example-campaign
+python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/workspace/.lotm-text-game/campaigns/example-campaign
+python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/workspace/.lotm-text-game/campaigns/example-campaign
 ```
 
 判定工具既可检查概率，也可生成真实骰点：
@@ -179,25 +168,6 @@ python3 scripts/roll_check.py odds --mode ordinary --target 100 --attribute 45 -
 python3 scripts/roll_check.py roll --mode ordinary --target 100 --attribute 45 --skill 10 \
   --context evt-000042:inspect-door
 ```
-
-服务端部署可以把这些记录映射到 SQLite、PostgreSQL 或对象存储，但必须保留版本校验、幂等、事务顺序和故障恢复语义。
-
-## 跨平台行为
-
-游戏会先提交事件，再处理表现层。同一个状态修订可以按照 Telegram 或其他 IM 平台的能力确定性降级。
-
-| 平台限制 | 确定性行为 |
-|---|---|
-| 没有可写文件系统 | 在内存中构建带摘要校验的可移植记忆锚，标记持久化降级，并禁止把隐藏状态发到群聊。 |
-| 不能发送图片 | 用同一修订的必需文字摘要替代状态卡。 |
-| 没有按钮 | 发送编号完整的文字选项，同时保留自由行动提示。 |
-| 消息长度很短 | 按语义边界拆分；无法保持编号与全文完整的选项会被拒绝发送。 |
-| 不支持编辑消息 | 另发一条明确的纠错消息。 |
-| webhook 或回调重复 | 返回该入口标识对应的既有结果，不再次调用游戏引擎。 |
-| 媒体发送超时 | 保持待确认或可重试；事件、骰点、状态修订和世界时间不变。 |
-| 多个聊天或话题 | 先解析完整范围键和控制者，再加载当前战役。 |
-
-传输规划器只使用 Python 标准库；宿主提供内存对象时，它不需要读写文件。
 
 ## 渲染状态面板
 
@@ -215,7 +185,7 @@ python3 scripts/render_panel.py \
   --output status.svg
 ```
 
-生成的 HTML 与 SVG 均为自包含文件。在 Telegram、Discord 等聊天平台中，应先将其光栅化为 PNG、JPEG 或 WebP。如果视觉渲染失败，引擎会依次降级到平台富文本和纯文字，同时保持战役状态不变。
+生成的 HTML 与 SVG 均为自包含文件。当前界面无法直接显示时，将其光栅化为 PNG、JPEG 或 WebP。如果视觉渲染失败，引擎会依次降级到富文本和纯文字，同时保持战役状态不变。
 
 界面没有 MMO 式的全局稀有度。封印物等级、事件危险度、序列层次、配方可信度与公开确认的物品类型分别表达；颜色只辅助已知语义，不会替玩家进行隐藏鉴定。
 
@@ -250,22 +220,19 @@ python3 scripts/render_panel.py \
 │   ├── presentation.md
 │   ├── appendices.md
 │   ├── runtime-and-storage.md
-│   ├── transport-adapters.md
 │   └── visual-media.md
 ├── scripts/
 │   ├── campaign_runtime.py
-│   ├── transport_contract.py
 │   ├── check_rules.py
 │   ├── check_markdown.py
-│   ├── runtime_paths.py
 │   ├── self_update.py
 │   ├── roll_check.py
 │   └── render_panel.py
 └── tests/
     ├── test_p0_runtime.py
     ├── test_p1_runtime.py
-    ├── test_startup_runtime.py
-    └── test_transport_contract.py
+    ├── test_self_update.py
+    └── test_portability.py
 ```
 
 运行标准库回归测试：
@@ -278,9 +245,9 @@ python3 scripts/check_markdown.py README.md README_CN.md SKILL.md references
 
 ## 安全与隐私
 
-- 可复用 Skill 不应包含真实战役数据、玩家媒体、聊天标识、凭据或机器人令牌。
+- 可复用 Skill 不应包含真实战役数据、生成的玩家媒体或凭据。
 - 玩家可见面板与插图提示词只能使用已经公开的事实。
-- 重复 webhook、按钮重试和上传失败不得重复结算同一个行动。
+- 恢复或重复输出不得再次结算同一个玩家行动。
 - 可选插图只负责表现，不能生成物品、泄露秘密、消耗资源或推进时间。
 
 ## 免责声明
