@@ -8,7 +8,7 @@ The engine commits one transport-neutral event. The adapter turns that committed
 
 Detect or configure:
 
-~~~yaml
+```yaml
 platform: telegram
 supports_raster_image: true
 supports_inline_svg: false
@@ -19,7 +19,7 @@ supports_message_edit: true
 max_text_chars: 4096
 max_caption_chars: 1024
 button_payload_bytes: 64
-~~~
+```
 
 Treat values as deployment configuration and verify them against current platform documentation.
 
@@ -27,7 +27,7 @@ Treat values as deployment configuration and verify them against current platfor
 
 For each committed turn, build:
 
-~~~yaml
+```yaml
 event_id: evt-000128
 state_revision: 128
 messages:
@@ -43,7 +43,7 @@ messages:
     buttons: []
 optional_media_offer:
   scene_event_id: evt-000128
-~~~
+```
 
 Split messages only at semantic boundaries. Keep the timestamp with narrative, the formula summary with adjudication, and every option with its number.
 
@@ -58,9 +58,9 @@ Recommended sequence:
 
 Use compact button payloads:
 
-~~~text
+```text
 g:<campaign-short-id>:<event-seq>:<choice>
-~~~
+```
 
 The server resolves the full action from committed state. Never put secrets, prose, hidden data, or mutable state in callback data.
 

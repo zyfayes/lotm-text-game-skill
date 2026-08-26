@@ -69,7 +69,7 @@ Do not offer one for routine travel, shopping, repeated combat exchanges, rules 
 
 Build prompts only from publicly established facts:
 
-~~~text
+```text
 Scene event: [event id and public scene title]
 Time and place: [public time and location]
 Subject: [public appearance, clothing, posture]
@@ -79,7 +79,7 @@ Mood: restrained Victorian occult mystery, fog, material detail, cinematic natur
 Continuity: [visual bible facts]
 Exclude: readable UI text, hidden characters, secret symbols, future events, unconfirmed items, engine-only facts
 Aspect ratio: [transport-appropriate]
-~~~
+```
 
 Choose the best available image-generation capability at runtime. Provider-specific model names belong in deployment configuration, not campaign rules.
 
@@ -99,7 +99,7 @@ State the visible moment and material facts before style language in the prompt.
 
 Store only public continuity facts:
 
-~~~yaml
+```yaml
 visuals:
   illustration_mode: ask
   character_bible:
@@ -113,7 +113,7 @@ visuals:
   item_bible: {}
   last_scene_event_id: null
   transport_cache: {}
-~~~
+```
 
 An image cannot establish new facts. If generated art introduces an unmentioned ring, scar, person, rune, or object, treat it as decorative noise unless later confirmed in text through a legitimate event.
 

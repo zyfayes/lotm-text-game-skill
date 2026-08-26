@@ -42,10 +42,10 @@ Create a single public panel model from authoritative state. Prefer a self-conta
 
 Use the deterministic renderer when local execution is available:
 
-~~~bash
+```bash
 python3 scripts/render_panel.py --input public-panel.json --format html --output status.html
 python3 scripts/render_panel.py --input public-panel.json --format svg --output status.svg
-~~~
+```
 
 Open or rasterize the result with the environment's supported browser or image tool. Inspect the rendered output for clipping, missing Chinese glyphs, wrong values, and hidden-information leakage before sending it.
 

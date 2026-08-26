@@ -26,17 +26,17 @@ When the ruleset names `state.yaml`, `events.jsonl`, `journal.md`, `canon-deviat
 
 Use a stable scope key before resolving the active campaign:
 
-~~~text
+```text
 <platform>:<agent-or-bot-id>:<conversation-id>:<thread-id-or-0>:<player-scope>
-~~~
+```
 
 Examples:
 
-~~~text
+```text
 local:codex:example-project:0:single
 telegram:example-bot:example-group:example-thread:shared
 telegram:example-bot:example-user-chat:0:example-user
-~~~
+```
 
 Private chats normally use one campaign per chat. Group and forum chats must explicitly choose either a shared campaign or one campaign per player. Never use one global active pointer for an entire bot service.
 
@@ -44,7 +44,7 @@ Private chats normally use one campaign per chat. Group and forum chats must exp
 
 For a single-player workspace, preserve the ruleset layout:
 
-~~~text
+```text
 campaigns/
 ├── active.yaml
 └── <campaign_id>/
@@ -53,7 +53,7 @@ campaigns/
     ├── journal.md
     ├── canon-deviations.md
     └── latest-anchor.md
-~~~
+```
 
 Generated panels and illustrations belong under a campaign media directory or external media store and must not be treated as authoritative state.
 
@@ -61,7 +61,7 @@ Generated panels and illustrations belong under a campaign media directory or ex
 
 A service may map the same records to tables or namespaced objects:
 
-~~~text
+```text
 campaign_scopes(scope_key, active_campaign_id, state_revision)
 campaign_states(campaign_id, state_revision, state_json, updated_at)
 campaign_events(campaign_id, event_id, ingress_id, payload_json, created_at)
@@ -69,7 +69,7 @@ campaign_documents(campaign_id, kind, revision, body)
 processed_ingress(scope_key, ingress_id, result_event_id)
 transport_outbox(outbox_id, campaign_id, event_id, payload, status, platform_message_id)
 campaign_media(media_id, campaign_id, event_id, kind, public_facts_hash, platform_file_id)
-~~~
+```
 
 The physical schema may vary. The uniqueness and transaction constraints may not:
 
@@ -99,7 +99,7 @@ If delivery fails after commit, retry delivery from the outbox. Never re-adjudic
 
 Each externally triggered action records enough data to deduplicate and audit it:
 
-~~~yaml
+```yaml
 transport:
   platform: telegram
   scope_key: "telegram:example-bot:example-user-chat:0:example-user"
@@ -109,7 +109,7 @@ transport:
   actor_id: "example-user"
   message_id: "example-message"
   callback_id: null
-~~~
+```
 
 Button callbacks use the callback query identifier as an additional ingress identifier. An edited message does not silently replace an already adjudicated action; treat it as a new request to clarify or correct.
 
