@@ -7,6 +7,16 @@ description: Run, continue, migrate, or deploy a persistent Lord of Mysteries te
 
 Operate as the campaign engine and adjudicator. Preserve world causality, player freedom, canonical boundaries, anti-cheat rules, deterministic state updates, and hidden/public knowledge separation.
 
+## Startup update
+
+On the first activation of this Skill in an Agent process or session, run `scripts/self_update.py` from this Skill directory before loading game references. Invoke the hook on every fresh Skill load; its git-private five-minute cache keeps repeated stateless or IM worker starts fast.
+
+- `updated`: discard cached Skill instructions, reread this `SKILL.md` completely from disk, and continue without running the hook a second time in the same activation.
+- `current` or `cached_current`: continue normally.
+- `offline`, `blocked`, `busy`, `unavailable`, or `disabled`: continue on the installed version. Do not retry during the same activation or delay play.
+
+The updater accepts only a clean git checkout of the trusted public repository on `main`, validates a candidate in an isolated worktree, and applies fast-forward updates. It never resets local changes or touches campaign data. Copied or packaged installs remain usable but cannot self-update; set `LOTM_AUTO_UPDATE=0` to disable the hook explicitly.
+
 ## Required reading
 
 Before every in-game adjudication, read [references/runtime-core.md](references/runtime-core.md) completely. It is the compact turn contract and escalation router; it does not replace the authoritative rules.
@@ -29,7 +39,7 @@ Read additional references only when relevant:
 
 ## Operating contract
 
-1. Resolve the campaign scope and transport capabilities before reading or writing active state.
+1. Resolve the runtime data root, campaign scope, and transport capabilities before reading or writing active state. Local Agents default to an explicitly supplied workspace root; service and IM deployments require `LOTM_DATA_ROOT`. Never derive the data root from an ambient current working directory.
 2. Load the authoritative state and last event, or a revision-bound minimal turn projection that can fetch missing authoritative slices. Recover an appended-but-uncommitted event before accepting a new action.
 3. Apply the ruleset exactly. Do not convert player meta-knowledge into character knowledge.
 4. Before an irreversible or meaningfully risky check, disclose the intent, approach, target, public modifiers, risk level, and foreseeable consequence categories. Let the player adjust before generating a roll unless the character truly has no time to react.
@@ -43,6 +53,8 @@ Read additional references only when relevant:
 ## New campaigns
 
 Follow the character-creation order in the ruleset one step at a time. Create the campaign directory or logical storage records only after the player supplies the character name and before the first state panel is delivered.
+
+Before creating the directory, run `scripts/runtime_paths.py` with `--mode local --workspace-root <absolute-workspace-root> --create`, or use `--mode service` with `LOTM_DATA_ROOT` configured. Pass the returned absolute `campaigns_dir` to the runtime helpers. Refuse creation when path resolution fails; never place live campaigns inside the reusable Skill directory.
 
 New campaigns use schema and ruleset version `1.7` with `campaign.play_mode: single_protagonist`. Initialize the goal contract, clues, investigations, RNG metadata, social and organization records, economy flows and debts, commitments, content preferences, chapter state, canon records, and the revision-1 creation event even when collections are empty. Installing this Skill never authorizes changing an existing campaign; migrate one only after an explicit user request and append a `ruleset_migrated` event.
 
@@ -63,9 +75,10 @@ Use the deterministic helpers when the runtime can execute local Python:
 ```bash
 python3 scripts/roll_check.py odds --mode ordinary --target 100 --attribute 45 --skill 10
 python3 scripts/roll_check.py roll --mode ordinary --target 100 --attribute 45 --skill 10 --context evt-000042:inspect-door
-python3 scripts/campaign_runtime.py validate --campaign-dir campaigns/<campaign_id>
-python3 scripts/campaign_runtime.py commit --campaign-dir campaigns/<campaign_id> --event pending-event.json
-python3 scripts/campaign_runtime.py recover --campaign-dir campaigns/<campaign_id>
+python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project --create
+python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/runtime-root/campaigns/example-campaign
+python3 scripts/campaign_runtime.py commit --campaign-dir /absolute/runtime-root/campaigns/example-campaign --event pending-event.json
+python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/runtime-root/campaigns/example-campaign
 python3 scripts/check_rules.py
 python3 scripts/check_markdown.py SKILL.md references
 python3 -m unittest discover -s tests -v

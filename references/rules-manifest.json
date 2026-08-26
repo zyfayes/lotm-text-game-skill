@@ -47,7 +47,7 @@
       "transport-adapters.md",
       "visual-media.md"
     ],
-    "ruleset_digest": "131a5a380d9fd38f0ac73debd655c9d8249789f1c2b806ebb4d7768aef693554"
+    "ruleset_digest": "265fae3a8452494439ec7b21428451120148cf153cc2c4c7e18acd866e331c94"
   },
   "legacy_sections": [
     {"id": "volume-1", "module": "core-rules.md", "heading": "【卷壹 · 星界律典】运行总纲与不可违铁则"},

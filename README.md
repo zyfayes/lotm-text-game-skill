@@ -116,6 +116,12 @@ Use $lotm-text-game to start a new game.
 
 Other Agent runtimes that support directory-based skills can load the root `SKILL.md` and preserve the same relative file structure.
 
+### Automatic updates
+
+A git-installed Skill checks the trusted repository's `main` branch on its first activation in each Agent process or session. The startup hook is always invoked; a five-minute state file inside `.git` avoids repeated network calls from short-lived IM workers. Remote checks time out quickly and never block play on the installed version.
+
+An update is applied only when the checkout is clean, the origin matches this repository, the remote commit is a fast-forward, and the candidate passes rule, Markdown, and unit-test validation in an isolated worktree. The updater never resets local changes or touches campaign data. Copied packages keep working without self-update. Set `LOTM_AUTO_UPDATE=0` to opt out.
+
 ## What happens when a campaign starts
 
 1. The player chooses a difficulty.
@@ -136,10 +142,18 @@ The original v1.6 schemas remain byte-preserved compatibility resources. Install
 
 ## Campaign persistence
 
-For a local single-player campaign, the engine maintains:
+Resolve the data location before creating a campaign:
+
+```bash
+python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project --create
+```
+
+Local mode defaults to the explicit workspace root. Telegram, Hermes, Web, and other service deployments must set `LOTM_DATA_ROOT` or pass `--data-root`; the engine never derives persistent storage from an ambient working directory. The resolver refuses the filesystem root, the user home directory itself, and the reusable Skill package.
+
+Under the resolved data root, the engine maintains:
 
 ```text
-campaigns/
+<resolved-data-root>/campaigns/
 ├── active.yaml
 └── <campaign_id>/
     ├── state.yaml
@@ -154,8 +168,8 @@ campaigns/
 The v1.7 runtime retains goal evidence, clues and investigations, public stakes, RNG provenance, consequences, and old-value-checked state patches. It also validates organization authority, social standing, commitments, financial flows, chapter transitions, content preferences, and canon-source confidence. Local agents can validate or recover a campaign with:
 
 ```bash
-python3 scripts/campaign_runtime.py validate --campaign-dir campaigns/<campaign_id>
-python3 scripts/campaign_runtime.py recover --campaign-dir campaigns/<campaign_id>
+python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/runtime-root/campaigns/example-campaign
+python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/runtime-root/campaigns/example-campaign
 ```
 
 The check helper can inspect calibrated odds or generate a real roll:
@@ -227,6 +241,7 @@ The UI does not use a universal MMO-style rarity ladder. Sealed Artifact grades,
 │   ├── portable-anchor.v1.6.schema.json
 │   ├── ruleset.md
 │   ├── rules-manifest.json
+│   ├── runtime-core.md
 │   ├── core-rules.md
 │   ├── canon-and-world.md
 │   ├── pathways-and-powers.md
@@ -242,11 +257,14 @@ The UI does not use a universal MMO-style rarity ladder. Sealed Artifact grades,
 │   ├── transport_contract.py
 │   ├── check_rules.py
 │   ├── check_markdown.py
+│   ├── runtime_paths.py
+│   ├── self_update.py
 │   ├── roll_check.py
 │   └── render_panel.py
 └── tests/
     ├── test_p0_runtime.py
     ├── test_p1_runtime.py
+    ├── test_startup_runtime.py
     └── test_transport_contract.py
 ```
 

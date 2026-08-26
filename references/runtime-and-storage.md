@@ -55,7 +55,15 @@ Private chats normally use one campaign per chat. Group and forum chats must cho
 
 ## Local filesystem profile
 
-For a single-player workspace, preserve the ruleset layout:
+Resolve the runtime location before creating or opening a campaign:
+
+```bash
+python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project --create
+```
+
+Local mode uses the explicitly supplied workspace root when `LOTM_DATA_ROOT` is absent. Service mode requires `LOTM_DATA_ROOT` or `--data-root`; it never falls back to the process working directory. The resolver rejects the filesystem root, the user home directory itself, and the reusable Skill directory. Its returned `campaigns_dir` is deployment metadata and must not enter campaign state, events, anchors, prompts, or player-visible output.
+
+Under the resolved data root, preserve the ruleset layout:
 
 ```text
 campaigns/
@@ -73,10 +81,10 @@ Generated panels and illustrations belong under a campaign media directory or ex
 When local Python is available, use the bundled runtime helper instead of hand-editing records:
 
 ```bash
-python3 scripts/campaign_runtime.py validate --campaign-dir campaigns/<campaign_id>
-python3 scripts/campaign_runtime.py commit --campaign-dir campaigns/<campaign_id> --event pending-event.json
-python3 scripts/campaign_runtime.py recover --campaign-dir campaigns/<campaign_id>
-python3 scripts/campaign_runtime.py export-anchor --campaign-dir campaigns/<campaign_id> --output portable-anchor.json
+python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/runtime-root/campaigns/example-campaign
+python3 scripts/campaign_runtime.py commit --campaign-dir /absolute/runtime-root/campaigns/example-campaign --event pending-event.json
+python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/runtime-root/campaigns/example-campaign
+python3 scripts/campaign_runtime.py export-anchor --campaign-dir /absolute/runtime-root/campaigns/example-campaign --output portable-anchor.json
 ```
 
 The helper writes JSON text to `state.yaml`; JSON is valid YAML 1.2 and keeps the no-dependency path deterministic. It also reads block-style YAML when PyYAML is installed.

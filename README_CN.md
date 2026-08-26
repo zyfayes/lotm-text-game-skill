@@ -116,6 +116,12 @@ git clone https://github.com/zyfayes/lotm-text-game-skill.git \
 
 其他支持目录式 Skill 的 Agent 也可以加载根目录的 `SKILL.md`，但需要保留仓库内部的相对路径结构。
 
+### 自动更新
+
+通过 Git 安装的 Skill 会在每个 Agent 进程或会话首次加载时检查可信公开仓库的 `main` 分支。启动钩子每次都会调用；`.git` 内的五分钟检查缓存可以避免短生命周期 IM Worker 重复访问网络。远端检查会快速超时，任何失败都不会阻止使用当前已安装版本继续游戏。
+
+只有工作区干净、origin 与本仓库一致、远端提交能够快进，并且候选版本在隔离 worktree 中通过规则、Markdown 和单元测试校验时，才会自动更新。更新器不会重置本地改动，也不会接触战役数据。复制安装仍可正常使用，但不具备自更新能力。设置 `LOTM_AUTO_UPDATE=0` 可以关闭自动更新。
+
 ## 一局游戏如何开始
 
 1. 玩家选择难度。
@@ -136,10 +142,18 @@ git clone https://github.com/zyfayes/lotm-text-game-skill.git \
 
 ## 战役持久化
 
-本地单人战役使用以下结构：
+创建战役前先解析数据落点：
+
+```bash
+python3 scripts/runtime_paths.py --mode local --workspace-root /absolute/project --create
+```
+
+本地模式默认使用显式传入的项目根。Telegram、Hermes、Web 等服务部署必须设置 `LOTM_DATA_ROOT` 或传入 `--data-root`；引擎不会从进程的临时工作目录推断持久化位置。解析器会拒绝文件系统根目录、用户主目录本身以及可复用 Skill 包。
+
+解析后的数据根使用以下结构：
 
 ```text
-campaigns/
+<resolved-data-root>/campaigns/
 ├── active.yaml
 └── <campaign_id>/
     ├── state.yaml
@@ -154,8 +168,8 @@ campaigns/
 v1.7 运行时继续记录目标证据、线索与调查、公开风险、随机来源、后果及带旧值校验的状态补丁，同时校验组织权限、社会地位、承诺、财务循环、章节切换、内容偏好与正典来源置信度。本地 Agent 可以运行：
 
 ```bash
-python3 scripts/campaign_runtime.py validate --campaign-dir campaigns/<campaign_id>
-python3 scripts/campaign_runtime.py recover --campaign-dir campaigns/<campaign_id>
+python3 scripts/campaign_runtime.py validate --campaign-dir /absolute/runtime-root/campaigns/example-campaign
+python3 scripts/campaign_runtime.py recover --campaign-dir /absolute/runtime-root/campaigns/example-campaign
 ```
 
 判定工具既可检查概率，也可生成真实骰点：
@@ -227,6 +241,7 @@ python3 scripts/render_panel.py \
 │   ├── portable-anchor.v1.6.schema.json
 │   ├── ruleset.md
 │   ├── rules-manifest.json
+│   ├── runtime-core.md
 │   ├── core-rules.md
 │   ├── canon-and-world.md
 │   ├── pathways-and-powers.md
@@ -242,11 +257,14 @@ python3 scripts/render_panel.py \
 │   ├── transport_contract.py
 │   ├── check_rules.py
 │   ├── check_markdown.py
+│   ├── runtime_paths.py
+│   ├── self_update.py
 │   ├── roll_check.py
 │   └── render_panel.py
 └── tests/
     ├── test_p0_runtime.py
     ├── test_p1_runtime.py
+    ├── test_startup_runtime.py
     └── test_transport_contract.py
 ```
 
