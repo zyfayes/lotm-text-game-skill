@@ -1,0 +1,151 @@
+# LOTM Text Game Skill
+
+[English](README.md) · **简体中文**
+
+一款受《诡秘之主》启发、能够长期保存进度并承担真实后果的文字冒险，也是一份可移植的 Agent Skill。
+
+你将在纪元 1349 年 6 月 28 日的廷根醒来，与刚刚苏醒的克莱恩·莫雷蒂生活在同一座城市、同一段历史中。你可以选择任何合理的人生，追随不同途径与势力，干预熟悉的事件，也可以完全绕开它们。世界不会等待玩家，每一次有意义的行动都可能改变未来。
+
+这是一套游戏引擎，而非预先写好的互动小说。它把自由角色扮演、明确判定、持久化战役、正典知识边界、确定性状态面板与 IM 平台适配组合在一起。
+
+## 为什么好玩
+
+| 系统 | 带来的游戏体验 |
+|---|---|
+| 自由行动 | 推荐选项不会把玩家锁进菜单，任何合理的世界内行为都可以尝试。 |
+| 持续运转的世界 | 势力、威胁和重大事件会继续发展，不会停下来等待玩家。 |
+| 真实后果 | 金钱、伤势、怀疑、关系、污染与错过的时机都会持续保留。 |
+| 序列成长 | 魔药、扮演、灵性、仪式、材料与失控风险构成完整的晋升循环。 |
+| 蝴蝶效应 | 玩家干预会积累因果值，可以改变重大命运锚点，却无法把正典角色变成傀儡。 |
+| 不可读档重掷 | 骰点与后果只结算一次；故障恢复只修复中断写入，不会重掷历史。 |
+| 三种难度 | 可以体验命运眷顾、平凡求生，或者充满恶意的地狱旅程。 |
+| 可选沉浸插图 | 在核心信息输出完成并取得玩家同意后，可为关键人物、道具和场景生成插图。 |
+
+## 核心架构
+
+游戏事实与表现层完全分离。HTML 渲染失败、Telegram 重试或图片生成超时，都不能改变骰点、推进时间或重写战役状态。
+
+```mermaid
+flowchart TD
+    U[玩家] --> T[本地 Agent 或 IM 适配器]
+    T --> A[运行 SKILL.md 的 Agent]
+    A --> R[规则与行动裁决]
+    R --> E[追加唯一且不可变的事件]
+    E --> S[提交权威状态]
+    S --> J[编年史与可移植记忆锚]
+    S --> P[公开面板模型]
+    P --> H[HTML 或 SVG 渲染器]
+    H --> I[PNG / JPEG / WebP]
+    P --> F[富文本或纯文字降级]
+```
+
+| 层级 | 职责 | 主要文件 |
+|---|---|---|
+| Agent 契约 | 加载正确规则并保证回合事务顺序 | `SKILL.md` |
+| 游戏语义 | 世界、角色创建、途径、判定、成长、因果与结局 | `references/ruleset.md` |
+| 持久化 | 战役隔离、只追加事件、原子状态、并发与恢复 | `references/runtime-and-storage.md` |
+| 传输层 | Telegram 与通用 IM 投递、去重、按钮和 outbox | `references/transport-adapters.md` |
+| 表现层 | 公开信息边界、移动端状态卡、语义色与插图授权 | `references/visual-media.md` |
+| 确定性 UI | 校验公开模型并生成自包含 HTML 或 SVG | `scripts/render_panel.py` |
+
+## 安装
+
+将仓库直接克隆到 Codex Skill 目录：
+
+```bash
+git clone https://github.com/zyfayes/lotm-text-game-skill.git \
+  ~/.codex/skills/lotm-text-game
+```
+
+重新启动或刷新 Agent，然后输入：
+
+```text
+使用 $lotm-text-game 开一局。
+```
+
+其他支持目录式 Skill 的 Agent 也可以加载根目录的 `SKILL.md`，但需要保留仓库内部的相对路径结构。
+
+## 一局游戏如何开始
+
+1. 玩家选择难度。
+2. 玩家选择性别。
+3. Agent 当场生成四张新背景卡，并提供自定义选项。
+4. 玩家亲自为主角命名。
+5. 引擎建立持久化战役账本，并立即生成第一张状态面板。
+6. 开局场景开始，同时提供推荐选项与自由行动。
+
+角色默认以普通人开局。平衡校验通过的自定义角色最高可以从序列 9 开始，但必须承担真实代价。
+
+## 战役持久化
+
+本地单人战役使用以下结构：
+
+```text
+campaigns/
+├── active.yaml
+└── <campaign_id>/
+    ├── state.yaml
+    ├── events.jsonl
+    ├── journal.md
+    ├── canon-deviations.md
+    └── latest-anchor.md
+```
+
+`state.yaml` 保存最新权威状态，`events.jsonl` 是只追加的完整审计记录。编年史只记录角色亲历或已经确认的事实；隐藏世界状态与角色知识严格分离。
+
+服务端部署可以把这些记录映射到 SQLite、PostgreSQL 或对象存储，但必须保留版本校验、幂等、事务顺序和故障恢复语义。
+
+## 渲染状态面板
+
+渲染器只依赖 Python 标准库：
+
+```bash
+python3 scripts/render_panel.py \
+  --input assets/panel-example.json \
+  --format html \
+  --output status.html
+
+python3 scripts/render_panel.py \
+  --input assets/panel-example.json \
+  --format svg \
+  --output status.svg
+```
+
+生成的 HTML 与 SVG 均为自包含文件。在 Telegram、Discord 等聊天平台中，应先将其光栅化为 PNG、JPEG 或 WebP。如果视觉渲染失败，引擎会依次降级到平台富文本和纯文字，同时保持战役状态不变。
+
+界面没有 MMO 式的全局稀有度。封印物等级、事件危险度、序列层次、配方可信度与公开确认的物品类型分别表达；颜色只辅助已知语义，不会替玩家进行隐藏鉴定。
+
+## 仓库结构
+
+```text
+.
+├── SKILL.md
+├── agents/
+│   └── openai.yaml
+├── assets/
+│   ├── dossier-masthead-engraving.png
+│   ├── icon.svg
+│   ├── panel-example.json
+│   └── panel-example.png
+├── references/
+│   ├── public-panel.schema.json
+│   ├── ruleset.md
+│   ├── runtime-and-storage.md
+│   ├── transport-adapters.md
+│   └── visual-media.md
+└── scripts/
+    └── render_panel.py
+```
+
+## 安全与隐私
+
+- 可复用 Skill 不应包含真实战役数据、玩家媒体、聊天标识、凭据或机器人令牌。
+- 玩家可见面板与插图提示词只能使用已经公开的事实。
+- 重复 webhook、按钮重试和上传失败不得重复结算同一个行动。
+- 可选插图只负责表现，不能生成物品、泄露秘密、消耗资源或推进时间。
+
+## 免责声明
+
+这是一个非官方、非商业的同人项目，与阅文集团、起点中文网、作者爱潜水的乌贼及任何官方授权方不存在隶属、授权或背书关系。源自《诡秘之主》的名称、角色、世界观及其他元素，其权利归各自权利人所有。
+
+MIT License 只适用于仓库作者有权授权的原创程序代码、运行协议与界面实现，不授予任何第三方知识产权许可。使用者有责任确保其部署、传播与生成内容符合适用法律和平台规则。

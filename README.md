@@ -1,5 +1,7 @@
 # LOTM Text Game Skill
 
+**English** · [简体中文](README_CN.md)
+
 A persistent, consequence-driven text adventure inspired by *Lord of Mysteries*, built as a portable Agent Skill.
 
 Play an ordinary person living in Tingen on June 28, 1349—the same world and time in which Klein Moretti has just awakened. Choose any plausible life, pursue any faction or Pathway, interfere with familiar events, or ignore them entirely. The world keeps moving, and every meaningful action can bend its future.
