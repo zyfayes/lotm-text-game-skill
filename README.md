@@ -1,52 +1,101 @@
 # LOTM Text Game Skill
 
-一个可持久化、跨平台的《诡秘之主》文字冒险 Skill。它把世界规则、判定、战役状态、聊天平台适配与视觉面板分离，使同一局游戏可以在 Codex、本地 Agent 或 Telegram 等 IM 环境中连续运行。
+A persistent, consequence-driven text adventure inspired by *Lord of Mysteries*, built as a portable Agent Skill.
 
-![移动端状态面板示例](assets/panel-example.png)
+Play an ordinary person living in Tingen on June 28, 1349—the same world and time in which Klein Moretti has just awakened. Choose any plausible life, pursue any faction or Pathway, interfere with familiar events, or ignore them entirely. The world keeps moving, and every meaningful action can bend its future.
 
-## 特性
+This is a game engine, not a scripted story. It combines open-ended role-play with explicit adjudication, durable campaign state, canon-aware knowledge boundaries, deterministic status panels, and transport contracts for local agents and IM platforms.
 
-- 基于序列、灵性、理智、污染、扮演法和封印物的完整游戏规则
-- 自由行动、统一 d100 判定、反作弊与正典知识边界
-- `state.yaml` 权威状态与只追加 `events.jsonl` 事件账本
-- HTML／SVG 确定性状态面板，可光栅化为 Telegram 兼容图片
-- 关键人物、道具与场景的可选沉浸插图协议
-- 多会话、幂等、并发与故障恢复约束
+## Why it is fun
 
-## 安装
+| System | What it adds to play |
+|---|---|
+| Free-form action | Suggested choices never lock the player into a menu. Any plausible in-world action can be attempted. |
+| A living timeline | Factions, threats, and major events continue to develop even when the player looks elsewhere. |
+| Real consequences | Money, injuries, suspicion, relationships, corruption, and missed timing all persist. |
+| Sequence progression | Potions, acting, spirituality, rituals, ingredients, and loss-of-control risk form one connected advancement loop. |
+| Butterfly effects | Interventions accumulate causal weight and can redirect major story anchors without turning canon characters into puppets. |
+| No save-scumming | Rolls and consequences are committed once. Recovery restores interrupted writes; it never rerolls history. |
+| Three difficulty modes | Play a fate-favored adventure, a grounded ordinary life, or a hostile survival campaign. |
+| Optional illustrations | Important people, objects, and scenes can receive generated artwork after the core turn is complete and the player agrees. |
 
-将整个仓库复制到 Agent 的 Skill 目录：
+## Core design
+
+The engine separates game truth from presentation. An HTML failure, Telegram retry, or image-generation timeout can never alter a roll or advance the clock.
+
+```mermaid
+flowchart TD
+    U[Player] --> T[Local Agent or IM Transport]
+    T --> A[Agent running SKILL.md]
+    A --> R[Ruleset and adjudication]
+    R --> E[Append one immutable event]
+    E --> S[Commit authoritative state]
+    S --> J[Journal and portable anchor]
+    S --> P[Public panel model]
+    P --> H[HTML or SVG renderer]
+    H --> I[PNG / JPEG / WebP]
+    P --> F[Rich-text or plain-text fallback]
+```
+
+| Layer | Responsibility | Main files |
+|---|---|---|
+| Agent contract | Loads the correct rules and preserves turn order | `SKILL.md` |
+| Game semantics | World, character creation, Pathways, checks, advancement, causality, and endings | `references/ruleset.md` |
+| Persistence | Campaign scoping, append-only events, atomic state, concurrency, and recovery | `references/runtime-and-storage.md` |
+| Transport | Telegram and generic IM delivery, deduplication, buttons, and outbox behavior | `references/transport-adapters.md` |
+| Presentation | Public-data boundaries, mobile status cards, semantic color, and illustration consent | `references/visual-media.md` |
+| Deterministic UI | Validates one public model and renders self-contained HTML or SVG | `scripts/render_panel.py` |
+
+## Installation
+
+Clone the repository directly into your Codex skills directory:
 
 ```bash
-git clone https://github.com/zyfayes/lotm-text-game-skill.git
-cp -R lotm-text-game-skill ~/.codex/skills/lotm-text-game
+git clone https://github.com/zyfayes/lotm-text-game-skill.git \
+  ~/.codex/skills/lotm-text-game
 ```
 
-重新启动或刷新 Agent 后，可以这样调用：
+Restart or refresh the Agent, then invoke:
 
 ```text
-使用 $lotm-text-game 开一局。
+Use $lotm-text-game to start a new game.
 ```
 
-支持 Skill 目录约定的其他 Agent，也可以直接加载根目录的 `SKILL.md`。
+Other Agent runtimes that support directory-based skills can load the root `SKILL.md` and preserve the same relative file structure.
 
-## 目录
+## What happens when a campaign starts
+
+1. The player chooses a difficulty.
+2. The player chooses a gender.
+3. The Agent generates four fresh character backgrounds plus a custom option.
+4. The player names the protagonist.
+5. The engine creates the durable campaign ledger and immediately renders the first status panel.
+6. The opening scene begins with free-form actions and suggested choices.
+
+Campaigns start with an ordinary person or, for a balanced custom background, at most a Sequence 9 Beyonder with a real cost attached.
+
+## Campaign persistence
+
+For a local single-player campaign, the engine maintains:
 
 ```text
-SKILL.md                         Skill 入口与运行契约
-agents/openai.yaml               Codex UI 元数据
-references/ruleset.md            完整游戏规则
-references/runtime-and-storage.md
-references/transport-adapters.md
-references/visual-media.md
-references/public-panel.schema.json
-scripts/render_panel.py          HTML／SVG 状态面板渲染器
-assets/                          示例模型、预览与装饰素材
+campaigns/
+├── active.yaml
+└── <campaign_id>/
+    ├── state.yaml
+    ├── events.jsonl
+    ├── journal.md
+    ├── canon-deviations.md
+    └── latest-anchor.md
 ```
 
-## 渲染状态面板
+`state.yaml` is the latest authoritative state. `events.jsonl` is an append-only audit trail. The journal contains only facts the character has experienced or confirmed. Hidden world state and character knowledge remain separate.
 
-渲染器只依赖 Python 标准库：
+Service deployments may map the same records to SQLite, PostgreSQL, or object storage, but must preserve version checks, idempotency, transaction order, and recovery semantics.
+
+## Rendering status panels
+
+The renderer uses only the Python standard library:
 
 ```bash
 python3 scripts/render_panel.py \
@@ -60,18 +109,41 @@ python3 scripts/render_panel.py \
   --output status.svg
 ```
 
-在 Telegram、Discord 等普通 IM 中，应把 HTML 或 SVG 光栅化为 PNG、JPEG 或 WebP 后发送。渲染失败只触发表现层降级，不会推进时间、重掷或改变战役状态。
+The generated HTML and SVG are self-contained. For Telegram, Discord, and similar chat platforms, rasterize them to PNG, JPEG, or WebP before delivery. If visual rendering fails, the engine falls back to platform-rich text and then plain text without changing campaign state.
 
-## 设计原则
+The UI does not use a universal MMO-style rarity ladder. Sealed Artifact grades, event danger, Sequence level, formula confidence, and publicly confirmed item types remain separate concepts. Color supports those known meanings but never performs a hidden appraisal.
 
-- 游戏事实只有一个权威来源，渲染器不能猜测状态。
-- 普通道具没有统一的 MMO 式稀有度；封印物等级、事件危险度、序列层次和配方可信度分别表达。
-- 颜色只辅助表达已经公开的语义，不承担隐藏鉴定。
-- 插图不建立新事实，也不能泄露角色未知信息。
-- 发布包不包含任何玩家战役、聊天标识、令牌或生成中的私人媒体。
+## Repository structure
 
-## 免责声明
+```text
+.
+├── SKILL.md
+├── agents/
+│   └── openai.yaml
+├── assets/
+│   ├── dossier-masthead-engraving.png
+│   ├── icon.svg
+│   ├── panel-example.json
+│   └── panel-example.png
+├── references/
+│   ├── public-panel.schema.json
+│   ├── ruleset.md
+│   ├── runtime-and-storage.md
+│   ├── transport-adapters.md
+│   └── visual-media.md
+└── scripts/
+    └── render_panel.py
+```
 
-这是一个非官方、非商业的同人项目，与阅文集团、起点中文网、作者爱潜水的乌贼及任何官方授权方无隶属或背书关系。《诡秘之主》相关名称、角色、世界观与原作设定的权利归各自权利人所有。
+## Safety and privacy
 
-MIT License 仅适用于本仓库原创的程序代码、运行协议和界面实现，不授予任何第三方知识产权许可。使用者应自行确保其部署、传播和生成内容符合所在地法律及相关平台规则。
+- Live campaign data, player media, chat identifiers, credentials, and bot tokens do not belong in the reusable Skill.
+- Player-visible panels and image prompts may contain only publicly established facts.
+- Duplicate webhooks, callback retries, or failed uploads must never adjudicate the same action twice.
+- Optional illustrations are cosmetic. They cannot create items, reveal secrets, consume resources, or advance time.
+
+## Disclaimer
+
+This is an unofficial, non-commercial fan project. It is not affiliated with or endorsed by China Literature, Qidian, the author Cuttlefish That Loves Diving, or any official license holder. Names, characters, settings, and other elements originating from *Lord of Mysteries* remain the property of their respective rights holders.
+
+The MIT License applies only to original software, operating protocols, and interface implementation for which the repository author has authority to grant permission. It does not grant rights to third-party intellectual property. Users are responsible for ensuring that their deployment, distribution, and generated content comply with applicable law and platform rules.
